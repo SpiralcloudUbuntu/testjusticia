@@ -2,6 +2,17 @@
    Lo que NO viene en el cuadernillo (tiempo maximo, penalizacion) va a null:
    la app lo muestra como "no confirmado" y deja que lo elija el usuario. */
 window.EXAMENES_META = {
+  "tramitacion-2020-ej3": {
+    "anio": 2020,
+    "turno": "Turno libre",
+    "etiqueta": "18/07/2020",
+    "minutos": null,
+    "penal": null,
+    "nota": "OEP 2019 · Orden JUS/903/2019 (acceso libre)",
+    "ejercicios": {
+      "1": 11
+    }
+  },
   "estabilizacion-2022-A": {
     "anio": 2024,
     "turno": "Estabilización (concurso-oposición)",

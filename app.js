@@ -898,7 +898,7 @@ const App = {
       document.getElementById('test-progress-bar').style.width = ((s.idx + 1) / s.preguntas.length * 100) + '%';
 
       const esPre = (p.fuente === 'preparador');
-      const est = this.porPregunta[s.bancoId + '#' + p.n];
+      const est = this.porPregunta[this.clave(p)];   // el pool reúne todos los exámenes: la clave lleva el banco de origen
       let hist = '';
       if (est && ((est.ok || 0) + (est.mal || 0)) > 0) {
         hist = ' <span class="hist-chip' + ((est.mal || 0) > UMBRAL_MUY_FALLADAS ? ' muy' : '') + '">' +
