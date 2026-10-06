@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#144684">
+<title>TestJusticia — Tramitación Procesal y Administrativa</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ================= MENU LATERAL ================= -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-brand">
+      <div class="side-logo">TJ</div>
+      <div class="side-brand-txt">
+        <b>TestJusticia</b>
+        <span>Tramitación Procesal</span>
+      </div>
+    </div>
+
+    <div class="side-sec">Estudio</div>
+    <button class="nav-btn active" type="button" data-tab="tab-inicio"><span class="ic">⌂</span> Inicio</button>
+    <button class="nav-btn" type="button" data-tab="tab-test"><span class="ic">✎</span> Test</button>
+    <button class="nav-btn" type="button" data-tab="tab-resultados"><span class="ic">◎</span> Resultados</button>
+    <button class="nav-btn" type="button" data-tab="tab-stats"><span class="ic">▤</span> Estadísticas</button>
+
+    <div class="side-pie">
+      <button class="nav-btn js-ajustes" type="button"><span class="ic">⚙</span> Ajustes</button>
+    </div>
+  </aside>
+  <div class="velo" id="velo"></div>
+
+  <div class="main">
+
+    <!-- ================= BARRA SUPERIOR ================= -->
+    <header class="topbar">
+      <button class="btn-menu" id="menu-toggle" type="button" aria-label="Menú">☰</button>
+      <h1>TestJusticia <span class="sub">Tramitación Procesal y Administrativa · Andalucía</span></h1>
+      <button id="btn-ajustes" class="icon-btn" type="button">Ajustes</button>
+    </header>
+
+    <div class="contenido">
+
+      <!-- ================= INICIO ================= -->
+      <section id="tab-inicio" class="tab-content">
+
+        <div class="qt-hero">
+          <div class="qt-blob b1"></div>
+          <div class="qt-blob b2"></div>
+          <div class="qt-hero-grid">
+            <div>
+              <div class="qt-kicker">Tu preparación</div>
+              <div class="qt-title">A por la <b>Tramitación</b></div>
+              <p class="qt-sub">Preguntas oficiales de examen y material del preparador, corregidas con respuesta validada.</p>
+              <div class="qt-chips" id="hero-chips">
+                <span class="qt-chip"><i>▦</i> Banco <b id="chip-total">0</b></span>
+                <span class="qt-chip"><i>✔</i> Oficiales <b id="chip-ofi">0</b></span>
+                <span class="qt-chip"><i>✎</i> Daniel Dorta <b id="chip-pre">0</b></span>
+              </div>
+            </div>
+            <div class="qt-hero-acts">
+              <button class="qt-act ofi" type="button" data-modo="simulacro">
+                <span class="ic">▶</span>
+                <span class="tx"><small>Examen</small><b>Simulacro</b></span>
+                <span class="go">›</span>
+              </button>
+              <button class="qt-act cont" type="button" data-modo="test">
+                <span class="ic">⚡</span>
+                <span class="tx"><small>Rápido</small><b>Test de 25</b></span>
+                <span class="go">›</span>
+              </button>
+              <button class="qt-act fallos" type="button" data-modo="fallos">
+                <span class="ic">↺</span>
+                <span class="tx"><small>Pendientes</small><b>Repaso de fallos</b></span>
+                <span class="go">›</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="qt-sec">
+          <h2>¿Qué quieres hacer?</h2>
+          <span>Elige un modo de estudio</span>
+        </div>
+
+        <div class="qt-modes">
+          <button class="qt-mode verde" type="button" data-modo="simulacro">
+            <span class="qt-mode-top"><span class="qt-mode-ic">▶</span><span class="qt-mode-name">Simulacro</span></span>
+            <span class="qt-mode-desc">Condiciones de examen: tiempo y penalización configurables.</span>
+            <span class="qt-mode-meta"><b id="desc-simulacro">—</b></span>
+          </button>
+
+          <button class="qt-mode" type="button" data-modo="test">
+            <span class="qt-mode-top"><span class="qt-mode-ic">⚡</span><span class="qt-mode-name">Test rápido</span></span>
+            <span class="qt-mode-desc">Preguntas al azar de todo el banco, sin presión de tiempo.</span>
+            <span class="qt-mode-meta"><b id="desc-test">—</b></span>
+          </button>
+
+          <button class="qt-mode rojo" type="button" data-modo="fallos">
+            <span class="qt-mode-top"><span class="qt-mode-ic">↺</span><span class="qt-mode-name">Repaso de fallos</span></span>
+            <span class="qt-mode-desc">Solo las preguntas que has fallado y aún no has acertado.</span>
+            <span class="qt-mode-meta"><b id="desc-fallos">—</b></span>
+          </button>
+
+          <button class="qt-mode ambar" type="button" data-modo="rango">
+            <span class="qt-mode-top"><span class="qt-mode-ic">⇅</span><span class="qt-mode-name">Por rango</span></span>
+            <span class="qt-mode-desc">Elige desde qué número hasta qué número del examen.</span>
+            <span class="qt-mode-meta"><b>Elegir rango</b></span>
+          </button>
+        </div>
+
+        <div class="qt-sec">
+          <h2>Modo de corrección</h2>
+          <span>Cómo quieres que se corrija el test</span>
+        </div>
+
+        <div class="seg" id="seg-modo">
+          <button class="seg-btn" type="button" data-correccion="examen">
+            <b>Modo examen</b>
+            <span>Contestas todo (o dejas en blanco) y ves las respuestas y la ley al finalizar.</span>
+          </button>
+          <button class="seg-btn" type="button" data-correccion="estudio">
+            <b>Modo estudio</b>
+            <span>Al contestar te dice si has acertado y la base legal, pregunta a pregunta.</span>
+          </button>
+        </div>
+
+        <div class="qt-sec">
+          <h2>Origen de las preguntas</h2>
+          <span>Filtra lo que entra en los tests</span>
+        </div>
+
+        <div class="card">
+          <div class="fchips" id="filtro-fuente">
+            <button class="fchip on" type="button" data-fuente="todas">Todas</button>
+            <button class="fchip fchip-ofi" type="button" data-fuente="oficial">Oficiales <b id="n-ofi">0</b></button>
+            <button class="fchip fchip-pre" type="button" data-fuente="preparador">Daniel Dorta <b id="n-pre">0</b></button>
+          </div>
+          <div class="fnota" id="fnota">Los tests usan todo el banco. Filtra si quieres estudiar solo una fuente.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Banco de preguntas</div>
+          <div id="banco-titulo" class="card-titulo">Cargando…</div>
+          <div id="banco-meta" class="card-meta"></div>
+        </div>
+
+        <div id="aviso-banco" class="aviso hidden"></div>
+
+        <div class="card">
+          <div class="card-label">Tu progreso</div>
+          <div id="resumen-inicio" class="resumen-grid"></div>
+        </div>
+      </section>
+
+      <!-- ================= TEST ================= -->
+      <section id="tab-test" class="tab-content hidden">
+
+        <!-- ---------- PORTADA: las dos formas de empezar ---------- -->
+        <div id="test-portada">
+          <div class="qt-sec">
+            <h2>Preparar un test</h2>
+            <span>Elige cómo quieres empezar</span>
+          </div>
+
+          <div class="qt-modes">
+            <button class="qt-mode verde" type="button" id="opt-oficiales">
+              <span class="qt-mode-top"><span class="qt-mode-ic">◎</span><span class="qt-mode-name">Exámenes oficiales</span></span>
+              <span class="qt-mode-desc">Un examen completo, tal y como cayó: sin elegir temas ni número de preguntas.</span>
+              <span class="qt-mode-meta"><b id="desc-oficiales">—</b></span>
+            </button>
+
+            <button class="qt-mode" type="button" id="opt-config">
+              <span class="qt-mode-top"><span class="qt-mode-ic">⚙</span><span class="qt-mode-name">Configurador de test</span></span>
+              <span class="qt-mode-desc">Tú eliges cuántas preguntas, el tiempo, el modo y de dónde salen.</span>
+              <span class="qt-mode-meta"><b>Personalizado</b></span>
+            </button>
+          </div>
+
+          <div class="qt-sec">
+            <h2>Accesos rápidos</h2>
+            <span>Lo que más se usa</span>
+          </div>
+          <div class="qt-modes">
+            <button class="qt-mode rojo" type="button" data-modo="fallos">
+              <span class="qt-mode-top"><span class="qt-mode-ic">↺</span><span class="qt-mode-name">Repaso de fallos</span></span>
+              <span class="qt-mode-desc">Solo las que has fallado y aún no has acertado.</span>
+              <span class="qt-mode-meta"><b id="desc-fallos2">—</b></span>
+            </button>
+            <button class="qt-mode ambar" type="button" data-modo="rango">
+              <span class="qt-mode-top"><span class="qt-mode-ic">⇅</span><span class="qt-mode-name">Por rango</span></span>
+              <span class="qt-mode-desc">Elige desde qué número hasta qué número del examen.</span>
+              <span class="qt-mode-meta"><b>Elegir rango</b></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ---------- VISTA: EXAMENES OFICIALES ---------- -->
+        <div id="vista-oficiales" class="hidden">
+          <div class="vista-cab">
+            <button class="btn-sec btn-volver" type="button" id="of-volver">‹ Volver</button>
+            <div class="vista-cab-tx"><b>Exámenes oficiales</b><span>completos, tal y como cayeron</span></div>
+          </div>
+
+          <div class="of-hero">
+            <div class="of-hero-tx">
+              <div class="qt-kicker">Examen oficial</div>
+              <div class="of-hero-t">Haz un examen entero</div>
+              <p class="qt-sub">Todas las preguntas de la convocatoria, sin recortar. La nota te la da al terminar.</p>
+            </div>
+            <div class="of-hero-num">
+              <b id="of-hechos">0</b>
+              <span>de <b id="of-total">0</b> <b id="of-total-lbl">exámenes</b> hechos</span>
+            </div>
+          </div>
+
+          <div class="fchips" id="of-filtros">
+            <button class="fchip on" type="button" data-of-filtro="todos">Todos</button>
+            <button class="fchip" type="button" data-of-filtro="sin-hacer">Sin hacer</button>
+            <button class="fchip" type="button" data-of-filtro="hechos">Hechos</button>
+          </div>
+
+          <div id="of-lista" class="of-lista"></div>
+        </div>
+
+        <!-- ---------- VISTA: CONFIGURAR UN EXAMEN OFICIAL ---------- -->
+        <div id="vista-examen" class="hidden">
+          <div class="vista-cab">
+            <button class="btn-sec btn-volver" type="button" id="ex-volver">‹ Volver a los exámenes</button>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Examen oficial</div>
+            <div class="card-titulo" id="ex-titulo">—</div>
+            <div class="card-meta" id="ex-meta"></div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">1</div>
+            <div class="paso-cuerpo">
+              <h3>Cómo quieres hacerlo</h3>
+              <div class="seg" id="ex-modo">
+                <button class="seg-btn" type="button" data-correccion="examen">
+                  <b>Modo examen</b>
+                  <span>Sin ayudas y con tiempo, como el día del examen. La nota, al terminar.</span>
+                </button>
+                <button class="seg-btn" type="button" data-correccion="estudio">
+                  <b>Modo estudio</b>
+                  <span>Ves si aciertas al momento, con la base legal de cada pregunta.</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">2</div>
+            <div class="paso-cuerpo">
+              <h3>Tiempo</h3>
+              <div class="chips-mini" id="ex-tiempos">
+                <button class="chip-mini" type="button" data-ex-min="0">Sin límite</button>
+                <button class="chip-mini" type="button" data-ex-min="30">30 min</button>
+                <button class="chip-mini" type="button" data-ex-min="45">45 min</button>
+                <button class="chip-mini" type="button" data-ex-min="60">60 min</button>
+                <button class="chip-mini" type="button" data-ex-min="90">90 min</button>
+                <button class="chip-mini" type="button" data-ex-min="120">120 min</button>
+              </div>
+              <div class="cfg-nota" id="ex-tiempo-nota">Cuando se acabe el tiempo, el test se entrega solo.</div>
+            </div>
+          </div>
+
+          <div class="cfg-final">
+            <div class="cfg-resumen" id="ex-resumen">—</div>
+            <button class="btn-pri btn-grande" type="button" id="ex-empezar">Comenzar el examen</button>
+          </div>
+        </div>
+
+        <!-- ---------- VISTA: CONFIGURADOR DE TEST ---------- -->
+        <div id="vista-config" class="hidden">
+          <div class="vista-cab">
+            <button class="btn-sec btn-volver" type="button" id="cfg-volver">‹ Volver</button>
+            <div class="vista-cab-tx"><b>Configurador de test</b><span>tú eliges las reglas</span></div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">1</div>
+            <div class="paso-cuerpo">
+              <h3>Cuántas preguntas</h3>
+              <div class="fila-cfg">
+                <input type="number" id="cfg-n" min="1" max="500" step="5" value="25">
+                <div class="chips-mini" id="cfg-n-rapidos">
+                  <button class="chip-mini" type="button" data-cfg-n="10">10</button>
+                  <button class="chip-mini" type="button" data-cfg-n="25">25</button>
+                  <button class="chip-mini" type="button" data-cfg-n="50">50</button>
+                  <button class="chip-mini" type="button" data-cfg-n="100">100</button>
+                  <button class="chip-mini" type="button" data-cfg-n="max">Todas</button>
+                </div>
+              </div>
+              <div class="cfg-nota" id="cfg-n-nota"></div>
+            </div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">2</div>
+            <div class="paso-cuerpo">
+              <h3>Modo, tiempo y penalización</h3>
+
+              <div class="seg" id="cfg-modo">
+                <button class="seg-btn" type="button" data-correccion="examen">
+                  <b>Modo examen</b>
+                  <span>Contestas todo (o dejas en blanco) y ves las respuestas al finalizar.</span>
+                </button>
+                <button class="seg-btn" type="button" data-correccion="estudio">
+                  <b>Modo estudio</b>
+                  <span>Al contestar te dice si has acertado y la base legal. Sin tiempo.</span>
+                </button>
+              </div>
+
+              <div class="sub-cfg">
+                <span class="sub-tit">Tiempo del test</span>
+                <div class="chips-mini" id="cfg-tiempos">
+                  <button class="chip-mini" type="button" data-cfg-min="0">Sin límite</button>
+                  <button class="chip-mini" type="button" data-cfg-min="15">15 min</button>
+                  <button class="chip-mini" type="button" data-cfg-min="30">30 min</button>
+                  <button class="chip-mini" type="button" data-cfg-min="45">45 min</button>
+                  <button class="chip-mini" type="button" data-cfg-min="60">60 min</button>
+                  <button class="chip-mini" type="button" data-cfg-min="90">90 min</button>
+                  <button class="chip-mini" type="button" data-cfg-min="120">120 min</button>
+                </div>
+                <div class="cfg-nota" id="cfg-tiempo-nota">Cuando se acabe el tiempo, el test se entrega solo.</div>
+              </div>
+
+              <div class="sub-cfg">
+                <span class="sub-tit">Penalización por fallo</span>
+                <div class="chips-mini" id="cfg-pen">
+                  <button class="chip-mini" type="button" data-cfg-pen="0">Sin restar</button>
+                  <button class="chip-mini" type="button" data-cfg-pen="0.2">4 fallos = 1 acierto</button>
+                  <button class="chip-mini" type="button" data-cfg-pen="0.25">3 fallos = 1 acierto</button>
+                  <button class="chip-mini" type="button" data-cfg-pen="0.33">2 fallos = 1 acierto</button>
+                  <button class="chip-mini" type="button" data-cfg-pen="1">1 fallo = 1 acierto</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">3</div>
+            <div class="paso-cuerpo">
+              <h3>De dónde salen las preguntas</h3>
+
+              <div class="sub-cfg">
+                <span class="sub-tit">Origen</span>
+                <div class="fchips" id="cfg-fuente">
+                  <button class="fchip on" type="button" data-fuente="todas">Todas</button>
+                  <button class="fchip fchip-ofi" type="button" data-fuente="oficial">Oficiales</button>
+                  <button class="fchip fchip-pre" type="button" data-fuente="preparador">Daniel Dorta</button>
+                </div>
+              </div>
+
+              <div class="sub-cfg">
+                <span class="sub-tit">Conjunto de preguntas</span>
+                <div class="fchips" id="cfg-conjunto">
+                  <button class="fchip on" type="button" data-conjunto="todas">Todas <b id="cj-todas">0</b></button>
+                  <button class="fchip" type="button" data-conjunto="sin-contestar">Sin contestar <b id="cj-sin">0</b></button>
+                  <button class="fchip" type="button" data-conjunto="falladas">Falladas <b id="cj-fall">0</b></button>
+                  <button class="fchip" type="button" data-conjunto="muy-falladas">Muy falladas <b id="cj-muy">0</b></button>
+                </div>
+                <div class="cfg-nota" id="cfg-conjunto-nota">Muy falladas: las que has fallado más de 3 veces.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-final">
+            <div class="cfg-resumen" id="cfg-resumen">—</div>
+            <button class="btn-pri btn-grande" type="button" id="cfg-empezar">Comenzar test</button>
+          </div>
+        </div>
+
+        <!-- ---------- TEST EN MARCHA ---------- -->
+        <div id="test-runner" class="hidden">
+        <div class="test-barra">
+          <div class="test-barra-top">
+            <span id="test-progreso-txt">0 / 0</span>
+            <span id="test-marcador" class="marcador"></span>
+            <span id="test-cronometro" class="crono hidden">00:00</span>
+            <button id="test-modo-chip" class="modo-chip examen" type="button">Examen</button>
+          </div>
+          <div class="progress"><div id="test-progress-bar" class="progress-fill"></div></div>
+        </div>
+
+        <div class="test-layout con-nav" id="test-layout">
+          <div class="pregunta">
+            <div class="pregunta-num" id="pregunta-num">Pregunta 1</div>
+            <div class="pregunta-enunciado" id="pregunta-enunciado"></div>
+            <div class="opciones" id="opciones"></div>
+            <div id="feedback" class="feedback hidden"></div>
+            <div id="justificacion" class="just hidden"></div>
+          </div>
+
+          <aside class="side-test" id="side-test">
+            <h4>Preguntas</h4>
+            <div class="question-nav" id="question-nav"></div>
+            <div class="leyenda">
+              <span><i style="background:#3b82f6"></i>Respondida</span>
+              <span><i style="background:#008000"></i>Correcta</span>
+              <span><i style="background:#ff0000"></i>Fallada</span>
+              <span><i style="background:#f59e0b"></i>En blanco</span>
+            </div>
+            <div class="afb" id="afb">
+              <span class="afb-ok" id="afb-ok" style="width:0%"></span>
+              <span class="afb-mal" id="afb-mal" style="width:0%"></span>
+              <span class="afb-bl" id="afb-bl" style="width:100%"></span>
+            </div>
+            <div class="fnota" id="afb-txt">0 aciertos · 0 fallos · 0 en blanco</div>
+          </aside>
+        </div>
+
+        <div class="test-nav">
+          <button id="btn-anterior" class="btn-sec" type="button">‹ Anterior</button>
+          <button id="btn-blanco" class="btn-blanco" type="button">Dejar en blanco</button>
+          <button id="btn-siguiente" class="btn-pri" type="button">Siguiente ›</button>
+        </div>
+        <div class="test-nav">
+          <button id="btn-finalizar" class="btn-peligro" type="button">Finalizar test</button>
+          <button id="btn-abandonar" class="btn-sec" type="button">Salir sin guardar</button>
+        </div>
+        </div><!-- /test-runner -->
+      </section>
+
+      <!-- ================= RESULTADOS ================= -->
+      <section id="tab-resultados" class="tab-content hidden">
+        <div class="card resultado-card">
+          <div id="resultado-nota" class="nota">—</div>
+          <div id="resultado-titulo" class="card-titulo">Resultado</div>
+          <div id="resultado-detalle" class="card-meta"></div>
+          <div class="afb">
+            <span class="afb-ok" id="res-afb-ok" style="width:0%"></span>
+            <span class="afb-mal" id="res-afb-mal" style="width:0%"></span>
+            <span class="afb-bl" id="res-afb-bl" style="width:100%"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Fallos de esta sesión</div>
+          <div id="lista-fallos" class="lista-fallos"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Revision completa</div>
+          <div id="lista-revision" class="lista-revision hidden"></div>
+          <div class="test-nav"><button id="btn-revision" class="btn-sec" type="button">Mostrar todas las preguntas</button></div>
+        </div>
+
+        <div class="test-nav">
+          <button id="btn-repetir-fallos" class="btn-pri" type="button">↺ Repetir los fallos</button>
+          <button id="btn-volver-inicio" class="btn-sec" type="button">Volver al inicio</button>
+        </div>
+      </section>
+
+      <!-- ================= ESTADÍSTICAS ================= -->
+      <section id="tab-stats" class="tab-content hidden">
+        <div class="card">
+          <div class="card-label">Global</div>
+          <div id="stats-global" class="resumen-grid"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Evolución por sesión</div>
+          <div id="stats-grafico" class="grafico"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Preguntas que más fallas</div>
+          <div id="stats-falladas" class="lista-fallos"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Historial</div>
+          <div id="stats-historial" class="historial"></div>
+        </div>
+      </section>
+
+    </div><!-- /contenido -->
+  </div><!-- /main -->
+</div><!-- /app-shell -->
+
+<!-- ================= MODAL AJUSTES ================= -->
+<div id="modal-ajustes" class="modal hidden">
+  <div class="modal-caja">
+    <div class="modal-cab">
+      <span>Ajustes</span>
+      <button id="btn-cerrar-ajustes" class="icon-btn" type="button">Cerrar</button>
+    </div>
+
+    <div class="modal-cuerpo">
+      <label class="campo">
+        <span>Preguntas en test rápido</span>
+        <input type="number" id="set-test-n" min="5" max="200" step="5">
+      </label>
+
+      <label class="campo">
+        <span>Preguntas en simulacro</span>
+        <input type="number" id="set-sim-n" min="10" max="200" step="10">
+      </label>
+
+      <label class="campo">
+        <span>Minutos de simulacro (0 = sin límite)</span>
+        <input type="number" id="set-sim-min" min="0" max="300" step="5">
+      </label>
+
+      <label class="campo">
+        <span>Penalización por fallo (0 = ninguna)</span>
+        <input type="number" id="set-penal" min="0" max="1" step="0.05">
+      </label>
+
+      <label class="campo-fila">
+        <input type="checkbox" id="set-correccion-inmediata">
+        <span>Corregir al instante (si no, al final)</span>
+      </label>
+
+      <label class="campo-fila">
+        <input type="checkbox" id="set-barajar">
+        <span>Barajar el orden de las preguntas</span>
+      </label>
+
+      <div class="modal-nota">
+        Los parámetros del simulacro hay que confirmarlos con la convocatoria
+        (número de preguntas, tiempo y penalización). Están configurables para
+        que los ajustéis vosotros.
+      </div>
+
+      <div class="modal-acciones">
+        <button id="btn-exportar" class="btn-sec" type="button">Exportar progreso</button>
+        <button id="btn-importar" class="btn-sec" type="button">Importar banco o progreso (.json)</button>
+        <button id="btn-reset" class="btn-peligro" type="button">Borrar todo el progreso</button>
+      </div>
+      <input type="file" id="file-import" accept="application/json" class="hidden">
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="datos/examenes.js"></script>
+<script src="datos/banco.js"></script>
+<script src="db.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function (e) {
+        console.warn('SW no registrado:', e);
+      });
+    });
+  }
+</script>
+</body>
+</html>
