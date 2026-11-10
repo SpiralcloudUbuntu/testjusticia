@@ -690,3 +690,24 @@ body.dark .racha.baja{color:#fca5a5;background:rgba(220,53,69,.14);border-color:
 .pdf-item-ops b.ok{color:var(--ok-fuerte);font-weight:800}
 .pdf-item-sel{font:inherit;font-size:12px;padding:3px 7px;border-radius:6px;border:1px solid var(--borde);background:var(--card);color:var(--ink);margin-left:auto}
 body.dark .pdf-item{background:#1e2739}
+
+/* =========================== MEMORIA =========================== */
+.memoria-lista{display:flex;flex-direction:column;gap:10px}
+.mem-item{border:1px solid var(--borde);border-radius:var(--radio);padding:12px 14px;background:var(--bg)}
+.mem-item-cab{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:6px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2)}
+.mem-item-enun{font-size:.92rem;line-height:1.45;margin-bottom:9px}
+.mem-racha{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.mem-dia{width:13px;height:13px;border-radius:50%;background:var(--borde);display:inline-block}
+.mem-dia.on{background:var(--ok-fuerte)}
+.mem-racha-tx{font-weight:800;color:var(--ink2);margin-left:5px;font-size:.78rem}
+.mem-badge{font-size:.65rem;padding:2px 8px;border-radius:999px;background:#eef2f7;color:#475569;font-weight:700}
+.mem-badge.auto{background:#fee2e2;color:#b91c1c}
+.mem-badge.manual{background:#dbeafe;color:#1e40af}
+.mem-badge.dom{background:#dcfce7;color:#15803d}
+.mem-vacio{padding:18px;text-align:center;color:var(--ink2);font-size:.9rem}
+.modo-chip.memoria{background:#eef2f7;color:#475569}
+.modo-chip.memoria.activa{background:#144684;color:#fff}
+body.dark .mem-item{background:#1e2739}
+body.dark .mem-dia{background:#33405a}
+body.dark .mem-badge{background:#33405a;color:#cbd5e1}
+body.dark .modo-chip.memoria{background:#33405a;color:#cbd5e1}

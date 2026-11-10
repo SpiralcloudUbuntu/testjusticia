@@ -59,8 +59,11 @@ const App = {
 
     this.leerAjustesUI();
     this.aplicarTema();
+    this._memFiltro = 'hoy';
+    this.cargarMemoria();
     this.pintarInicio();
     this.pintarStats();
+    this.pintarMemoria();
     this.enganchar();
     this.vistaTest('portada');
 
@@ -103,6 +106,11 @@ const App = {
     });
     document.getElementById('btn-blanco').addEventListener('click', () => this.blanco());
     document.getElementById('btn-revision').addEventListener('click', () => this.toggleRevision());
+    document.getElementById('btn-memorizar').addEventListener('click', () => this.memorizarActual());
+    document.getElementById('btn-memoria-repasar').addEventListener('click', () => this.empezarMemoria());
+    this.$$('#memoria-filtros [data-mem]').forEach((b) => {
+      b.addEventListener('click', () => this.setMemFiltro(b.dataset.mem));
+    });
     this.$$('#rev-filtros [data-rev]').forEach((b) => {
       b.addEventListener('click', () => this.setRevFiltro(b.dataset.rev));
     });
@@ -279,6 +287,7 @@ const App = {
     if (sec) sec.classList.remove('hidden');
     this.$$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
     this.cerrarMenu();
+    if (id === 'tab-memoria') this.pintarMemoria();
     if (id === 'tab-test') {
       const v = this.sesion ? 'runner' : ((this._vistaTest && this._vistaTest !== 'runner') ? this._vistaTest : 'portada');
       this.vistaTest(v);
@@ -735,6 +744,11 @@ const App = {
     } else {
       st.mal = (st.mal || 0) + 1;
       if (!this.fallos.includes(k)) this.fallos.push(k);
+      // Al tercer fallo acumulado la pregunta entra sola en MemorIA.
+      if ((st.mal || 0) >= 3 && !this.enMemoria(k)) {
+        this.memorizar(p, 'auto');
+        this.toast('Entra en MemorIA: 3 fallos');
+      }
     }
     s.contadas = s.contadas || {};
     s.contadas[i] = true;
@@ -1010,6 +1024,7 @@ const App = {
       document.getElementById('btn-anterior').disabled = s.idx === 0;
       const ultima = s.idx === s.preguntas.length - 1;
       document.getElementById('btn-siguiente').textContent = ultima ? 'Ver resultados' : 'Siguiente';
+      this.pintarBotonMemorizar();
     } catch (e) {
       console.error('pintarPregunta', e);
     }
@@ -1207,6 +1222,15 @@ const App = {
       this.examenesHechos[s.examenId] = h;
       DB.set('examenesHechos', this.examenesHechos);
     }
+
+    // MemorIA: cuenta el repaso del dia y saca la pregunta si llega a 5 dias.
+    if (s.modo === 'memoria') {
+      s.preguntas.forEach((p, i) => {
+        this.registrarRepaso(this.clave(p), s.respuestas[i] === p.correcta);
+      });
+      this.pintarMemoria();
+    }
+
     DB.del('sesion');
 
     this._ultimosFallos = s.preguntas.filter((p, i) => s.respuestas[i] && s.respuestas[i] !== p.correcta);
@@ -1609,6 +1633,247 @@ const App = {
     this._pdfPreguntas = null;
   },
 
+  /* ================= MemorIA (repaso diario) =================
+     Entra sola al tercer fallo o a mano con el boton ★.
+     Solo sale cuando se acierta 5 dias seguidos. */
+
+  hoyISO(d) {
+    const x = d ? new Date(d) : new Date();
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return x.getFullYear() + '-' + p(x.getMonth() + 1) + '-' + p(x.getDate());
+  },
+
+  ayerISO() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return this.hoyISO(d);
+  },
+
+  cargarMemoria() {
+    if (!this.mem) this.mem = DB.get('memoria', {}) || {};
+    return this.mem;
+  },
+
+  guardarMemoria() { DB.set('memoria', this.mem || {}); },
+
+  enMemoria(clave) { return !!(this.cargarMemoria()[clave]); },
+
+  memorizar(p, origen) {
+    const k = this.clave(p);
+    const mem = this.cargarMemoria();
+    if (mem[k]) return false;
+    mem[k] = {
+      clave: k,
+      banco: p._banco || (this.banco ? this.banco.id : ''),
+      n: p.n,
+      enunciado: p.enunciado,
+      opciones: p.opciones,
+      correcta: p.correcta,
+      fuente: p.fuente || 'oficial',
+      justificacion: p.justificacion || '',
+      base: p.base || '',
+      alta: new Date().toISOString(),
+      origen: origen || 'manual',
+      racha: 0,
+      ultimoDia: '',
+      fallos: 1,
+      dominada: false
+    };
+    this.guardarMemoria();
+    this.pintarMemoria();
+    return true;
+  },
+
+  quitarMemoria(clave) {
+    const mem = this.cargarMemoria();
+    if (!mem[clave]) return;
+    delete mem[clave];
+    this.guardarMemoria();
+    this.pintarMemoria();
+  },
+
+  /* Una pregunta esta pendiente si no esta dominada y no se ha repasado hoy. */
+  pendienteHoy(m) {
+    if (!m || m.dominada) return false;
+    return m.ultimoDia !== this.hoyISO();
+  },
+
+  pendientesHoy() {
+    const mem = this.cargarMemoria();
+    return Object.keys(mem).map((k) => mem[k]).filter((m) => this.pendienteHoy(m));
+  },
+
+  registrarRepaso(clave, acierto) {
+    const mem = this.cargarMemoria();
+    const m = mem[clave];
+    if (!m || m.dominada) return;
+    const hoy = this.hoyISO();
+    if (m.ultimoDia === hoy) return; // ya contabilizada hoy
+
+    if (acierto) {
+      m.racha = (m.ultimoDia === this.ayerISO()) ? ((m.racha || 0) + 1) : 1;
+      m.ultimoDia = hoy;
+      m.ultimoAcierto = hoy;
+      if (m.racha >= 5) {
+        m.dominada = true;
+        m.fechaDominada = hoy;
+      }
+    } else {
+      m.racha = 0;
+      m.ultimoDia = hoy;
+      m.fallos = (m.fallos || 0) + 1;
+    }
+    this.guardarMemoria();
+  },
+
+  memoriaActual() {
+    const s = this.sesion;
+    if (!s) return null;
+    const p = s.preguntas[s.idx];
+    if (!p) return null;
+    return this.cargarMemoria()[this.clave(p)] || null;
+  },
+
+  memorizarActual() {
+    const s = this.sesion;
+    if (!s) return;
+    const p = s.preguntas[s.idx];
+    if (!p) return;
+    const k = this.clave(p);
+    if (this.enMemoria(k)) {
+      this.quitarMemoria(k);
+      this.toast('Quitada de MemorIA');
+    } else {
+      this.memorizar(p, 'manual');
+      this.toast('Añadida a MemorIA');
+    }
+    this.pintarBotonMemorizar();
+  },
+
+  pintarBotonMemorizar() {
+    const btn = document.getElementById('btn-memorizar');
+    if (!btn) return;
+    const m = this.memoriaActual();
+    if (m) {
+      btn.classList.add('activa');
+      btn.textContent = m.dominada ? '★ Dominada' : '★ MemorIA ' + (m.racha || 0) + '/5';
+    } else {
+      btn.classList.remove('activa');
+      btn.textContent = '★ MemorIA';
+    }
+  },
+
+  setMemFiltro(f) {
+    this._memFiltro = f || 'hoy';
+    this.$$('#memoria-filtros [data-mem]').forEach((b) => b.classList.toggle('on', b.dataset.mem === this._memFiltro));
+    this.pintarMemoria();
+  },
+
+  pintarMemoria() {
+    const mem = this.cargarMemoria();
+    const todas = Object.keys(mem).map((k) => mem[k]);
+    const pend = todas.filter((m) => this.pendienteHoy(m));
+    const dominadas = todas.filter((m) => m.dominada);
+    const enRacha = todas.filter((m) => !m.dominada && (m.racha || 0) > 0);
+
+    const cont = document.getElementById('memoria-contadores');
+    if (cont) {
+      cont.innerHTML =
+        this.mini(pend.length, 'Para hoy', pend.length ? 'mal' : '') +
+        this.mini(enRacha.length, 'En racha') +
+        this.mini(dominadas.length, 'Dominadas', dominadas.length ? 'ok' : '') +
+        this.mini(todas.length, 'En total');
+    }
+
+    const btn = document.getElementById('btn-memoria-repasar');
+    if (btn) {
+      btn.disabled = pend.length === 0;
+      btn.textContent = pend.length
+        ? 'Repasar ahora (' + pend.length + ')'
+        : 'No hay nada para hoy';
+    }
+
+    const el = document.getElementById('memoria-lista');
+    if (!el) return;
+    const f = this._memFiltro || 'hoy';
+    let lista = todas;
+    if (f === 'hoy') lista = pend;
+    else if (f === 'dominadas') lista = dominadas;
+    lista = lista.slice().sort((a, b) => (b.alta || '').localeCompare(a.alta || ''));
+
+    if (!lista.length) {
+      el.innerHTML = '<div class="mem-vacio">' +
+        (f === 'hoy' ? 'Nada que repasar hoy. Vuelve mañana.' :
+         f === 'dominadas' ? 'Todavía no has dominado ninguna.' :
+         'MemorIA está vacía. Las preguntas entran al tercer fallo.') +
+        '</div>';
+      return;
+    }
+
+    el.innerHTML = lista.map((m) => {
+      const racha = (m.racha || 0);
+      const dias = [0, 1, 2, 3, 4].map((i) =>
+        '<i class="mem-dia' + (i < racha ? ' on' : '') + '"></i>').join('');
+      const badge = m.dominada
+        ? '<span class="mem-badge dom">Dominada</span>'
+        : '<span class="mem-badge ' + (m.origen === 'auto' ? 'auto' : 'manual') + '">' +
+          (m.origen === 'auto' ? '3 fallos' : 'Manual') + '</span>';
+      const estado = m.dominada
+        ? 'Fuera de MemorIA desde el ' + (m.fechaDominada || '—')
+        : (this.pendienteHoy(m) ? 'Toca repasar hoy' : 'Repasada hoy');
+      return '<div class="mem-item">' +
+        '<div class="mem-item-cab">' +
+          badge + '<span>' + this.esc(estado) + '</span>' +
+          '<span class="mem-racha">' + dias + '<b class="mem-racha-tx">' + racha + '/5</b></span>' +
+        '</div>' +
+        '<div class="mem-item-enun">' + this.esc(m.enunciado) + '</div>' +
+        '<div class="card-meta">Pregunta ' + m.n + ' · ' + this.esc(m.base || 'Sin base legal') +
+          ' · fallos acumulados: ' + (m.fallos || 0) + '</div>' +
+      '</div>';
+    }).join('');
+  },
+
+  empezarMemoria() {
+    const pend = this.pendientesHoy();
+    if (!pend.length) { this.toast('No hay preguntas para repasar hoy'); return; }
+    const lista = pend.map((m) => ({
+      n: m.n,
+      _banco: m.banco,
+      ejercicio: 1,
+      enunciado: m.enunciado,
+      opciones: m.opciones,
+      correcta: m.correcta,
+      reserva: false,
+      fuente: m.fuente || 'oficial',
+      justificacion: m.justificacion || '',
+      base: m.base || ''
+    }));
+
+    this.sesion = {
+      bancoId: this.banco ? this.banco.id : (lista[0]._banco || ''),
+      modo: 'memoria',
+      titulo: 'MemorIA · repaso del ' + this.hoyISO(),
+      examenId: null,
+      preguntas: lista,
+      respuestas: {},
+      corregidas: {},
+      contadas: {},
+      descartadas: {},
+      idx: 0,
+      inicio: Date.now(),
+      fin: null,
+      minutos: 0,
+      penal: 0,
+      correccionInmediata: true,   // en MemorIA siempre corrige al momento
+      tiempo: 0
+    };
+    this.guardarSesion();
+    this.arrancarCrono();
+    this.pintarPregunta();
+    this.mostrarTab('tab-test');
+    this.pintarSegModo();
+  },
+
   /* ================= export / import / reset ================= */
 
   exportar() {
@@ -1620,6 +1885,7 @@ const App = {
       historial: this.historial,
       porPregunta: this.porPregunta,
       fallos: this.fallos,
+      memoria: DB.get('memoria', {}) || {},
       bancos: DB.get('bancos', []) || []
     };
     const txt = JSON.stringify(datos, null, 2);
@@ -1673,6 +1939,7 @@ const App = {
         if (d.historial) this.historial = d.historial;
         if (d.porPregunta) this.porPregunta = d.porPregunta;
         if (d.fallos) this.fallos = d.fallos;
+        if (d.memoria) { DB.set('memoria', d.memoria); this.mem = d.memoria; }
         if (d.ajustes) this.ajustes = Object.assign({}, AJUSTES_DEF, d.ajustes);
         if (Array.isArray(d.bancos)) DB.set('bancos', d.bancos);
 
@@ -1704,6 +1971,8 @@ const App = {
     this.fallos = [];
     this.examenesHechos = {};
     this.sesion = null;
+    this.mem = {};
+    DB.del('memoria');
     this.cfg = { n: 25, min: 0, conjunto: 'todas' };
     clearInterval(this._timer);
     this.pintarInicio();

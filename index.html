@@ -27,6 +27,7 @@
     <button class="nav-btn" type="button" data-tab="tab-test"><span class="ic">✎</span> Test</button>
     <button class="nav-btn" type="button" data-tab="tab-resultados"><span class="ic">◎</span> Resultados</button>
     <button class="nav-btn" type="button" data-tab="tab-stats"><span class="ic">▤</span> Estadísticas</button>
+    <button class="nav-btn" type="button" data-tab="tab-memoria"><span class="ic">★</span> MemorIA</button>
 
     <div class="side-pie">
       <button class="nav-btn js-ajustes" type="button"><span class="ic">⚙</span> Ajustes</button>
@@ -386,6 +387,7 @@
             <span id="test-progreso-txt">0 / 0</span>
             <span id="test-marcador" class="marcador"></span>
             <span id="test-cronometro" class="crono hidden">00:00</span>
+            <button id="btn-memorizar" class="modo-chip memoria" type="button" title="Añadir esta pregunta a MemorIA">★ MemorIA</button>
             <button id="test-modo-chip" class="modo-chip examen" type="button">Examen</button>
           </div>
           <div class="progress"><div id="test-progress-bar" class="progress-fill"></div></div>
@@ -484,6 +486,32 @@
         <div class="card">
           <div class="card-label">Historial</div>
           <div id="stats-historial" class="historial"></div>
+        </div>
+      </section>
+
+      <!-- ================= MEMORIA ================= -->
+      <section id="tab-memoria" class="tab-content hidden">
+        <div class="card">
+          <div class="card-label">MemorIA · repaso diario</div>
+          <div class="card-titulo">Las preguntas que se te resisten</div>
+          <div class="card-meta">
+            Entran solas al <strong>tercer fallo</strong>, o cuando tú quieras con el botón ★.
+            Solo salen cuando las aciertas <strong>5 días seguidos</strong>.
+          </div>
+          <div id="memoria-contadores" class="resumen-grid"></div>
+          <div class="test-nav">
+            <button id="btn-memoria-repasar" class="btn-pri" type="button">Repasar ahora</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Preguntas en MemorIA</div>
+          <div class="fchips" id="memoria-filtros">
+            <button class="fchip on" type="button" data-mem="hoy">Para hoy</button>
+            <button class="fchip" type="button" data-mem="todas">Todas</button>
+            <button class="fchip" type="button" data-mem="dominadas">Dominadas</button>
+          </div>
+          <div id="memoria-lista" class="memoria-lista"></div>
         </div>
       </section>
 
