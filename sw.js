@@ -1,6 +1,6 @@
 /* sw.js — Service Worker: cache-first para los assets de la app.
    Sube CACHE_NAME en CADA deploy (incluidos reverts). */
-const CACHE_NAME = 'testjusticia-v8';
+const CACHE_NAME = 'testjusticia-v9';
 
 const ASSETS = [
   './',
@@ -40,6 +40,25 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  // El HTML va SIEMPRE a red primero: si no, el service worker sirve para
+  // siempre el index.html viejo y la app parece que no se actualiza.
+  const esHtml = req.mode === 'navigate' ||
+    url.pathname.endsWith('/') ||
+    url.pathname.endsWith('/index.html') ||
+    url.pathname.endsWith('sw.js');
+  if (esHtml) {
+    event.respondWith(
+      fetch(req).then((resp) => {
+        if (resp && resp.status === 200) {
+          const copia = resp.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copia));
+        }
+        return resp;
+      }).catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(req).then((cacheado) => {

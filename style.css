@@ -711,3 +711,18 @@ body.dark .mem-item{background:#1e2739}
 body.dark .mem-dia{background:#33405a}
 body.dark .mem-badge{background:#33405a;color:#cbd5e1}
 body.dark .modo-chip.memoria{background:#33405a;color:#cbd5e1}
+
+/* =========================== LISTA DE TESTS =========================== */
+.lista-tests{display:flex;flex-direction:column;gap:10px}
+.test-item{border:1px solid var(--borde);border-radius:var(--radio);padding:12px 14px;background:var(--bg)}
+.test-item.abierto{border-left:4px solid var(--warn)}
+.test-item.terminado{border-left:4px solid var(--ok-fuerte)}
+.test-item-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.test-item-fecha{font-size:.72rem;color:var(--ink2);font-weight:700}
+.test-badge{font-size:.72rem;font-weight:800;padding:2px 9px;border-radius:999px}
+.test-badge.abierto{background:#fef3c7;color:#92400e}
+.test-badge.ok{background:#dcfce7;color:#15803d}
+.test-item-t{font-weight:700;font-size:.95rem;margin-bottom:3px}
+.test-item-m{font-size:.8rem;color:var(--ink2)}
+body.dark .test-item{background:#1e2739}
+body.dark .test-badge.abierto{background:#3a2a17;color:#fdba74}

@@ -5,6 +5,9 @@
 /* "Muy falladas" = falladas MAS de 3 veces (es decir, 4 o mas). Pedido por Guti el 05/10/2026. */
 const UMBRAL_MUY_FALLADAS = 3;
 
+/* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
+const APP_VERSION = 'v9';
+
 const AJUSTES_DEF = {
   testN: 25,
   simN: 100,
@@ -60,10 +63,12 @@ const App = {
     this.leerAjustesUI();
     this.aplicarTema();
     this._memFiltro = 'hoy';
+    this._histFiltro = 'todos';
     this.cargarMemoria();
     this.pintarInicio();
     this.pintarStats();
     this.pintarMemoria();
+    this.pintarListaTests();
     this.enganchar();
     this.vistaTest('portada');
 
@@ -111,6 +116,9 @@ const App = {
     this.$$('#memoria-filtros [data-mem]').forEach((b) => {
       b.addEventListener('click', () => this.setMemFiltro(b.dataset.mem));
     });
+    this.$$('#hist-filtros [data-hist]').forEach((b) => {
+      b.addEventListener('click', () => this.setHistFiltro(b.dataset.hist));
+    });
     this.$$('#rev-filtros [data-rev]').forEach((b) => {
       b.addEventListener('click', () => this.setRevFiltro(b.dataset.rev));
     });
@@ -140,6 +148,7 @@ const App = {
     document.getElementById('btn-guardar-pdf').addEventListener('click', () => this.guardarBancoPDF());
     document.getElementById('btn-cerrar-pdf').addEventListener('click', () => this.cerrarModalPDF());
     document.getElementById('btn-cancelar-pdf').addEventListener('click', () => this.cerrarModalPDF());
+    document.getElementById('btn-actualizar').addEventListener('click', () => this.actualizarApp());
     document.getElementById('btn-reset').addEventListener('click', () => this.reset());
 
     ['testN', 'simN', 'simMin', 'penal', 'correccionInmediata', 'barajar', 'oscuro'].forEach((k) => {
@@ -282,17 +291,87 @@ const App = {
   /* ================= navegación ================= */
 
   mostrarTab(id) {
+    // Si hay un test en curso y se va a otra pestaña, preguntar antes.
+    if (this.sesion && id !== 'tab-test') {
+      if (!this.confirmarSalidaTest()) return;
+    }
     this.$$('.tab-content').forEach((s) => s.classList.add('hidden'));
     const sec = document.getElementById(id);
     if (sec) sec.classList.remove('hidden');
     this.$$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
     this.cerrarMenu();
     if (id === 'tab-memoria') this.pintarMemoria();
+    if (id === 'tab-resultados') this.pintarListaTests();
     if (id === 'tab-test') {
-      const v = this.sesion ? 'runner' : ((this._vistaTest && this._vistaTest !== 'runner') ? this._vistaTest : 'portada');
-      this.vistaTest(v);
+      // La pestaña Test abre SIEMPRE la portada, para elegir como hacerlo.
+      // Solo se va directo al runner cuando lo pide una accion concreta
+      // (continuar un test pausado, repasar MemorIA...).
+      if (this._irRunner && this.sesion) {
+        this._irRunner = false;
+        this.vistaTest('runner');
+      } else {
+        this._irRunner = false;
+        this.vistaTest('portada');
+      }
     }
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  },
+
+  /* Pregunta al salir de un test en curso. true = seguir con la navegacion. */
+  confirmarSalidaTest() {
+    const s = this.sesion;
+    if (!s) return true;
+    const hechas = Object.keys(s.respuestas || {}).length;
+    const total = (s.preguntas || []).length;
+    const ok = confirm(
+      'Tienes un test a medias (' + hechas + '/' + total + ' respondidas).\n\n' +
+      'Aceptar: guardarlo para continuar cuando quieras.\n' +
+      'Cancelar: seguir en el test.'
+    );
+    if (!ok) return false;
+    this.pausarSesion();
+    return true;
+  },
+
+  /* Guarda la sesion en curso en la lista de "a medias". */
+  pausarSesion() {
+    const s = this.sesion;
+    if (!s) return;
+    s._pausada = true;
+    s._guardada = new Date().toISOString();
+    s._id = s._id || ('ses-' + Date.now());
+    const lista = DB.get('pausadas', []) || [];
+    const i = lista.findIndex((x) => x._id === s._id);
+    if (i >= 0) lista[i] = s; else lista.push(s);
+    DB.set('pausadas', lista);
+    DB.del('sesion');
+    clearInterval(this._timer);
+    this.sesion = null;
+    this.toast('Test guardado. Lo tienes en Resultados.');
+  },
+
+  continuarPausada(id) {
+    const lista = DB.get('pausadas', []) || [];
+    const i = lista.findIndex((x) => x._id === id);
+    if (i < 0) { this.toast('Ese test ya no existe'); return; }
+    const s = lista.splice(i, 1)[0];
+    DB.set('pausadas', lista);
+    delete s._pausada;
+    delete s._guardada;
+    this.sesion = s;
+    this.guardarSesion();
+    this._irRunner = true;
+    this.arrancarCrono();
+    this.pintarPregunta();
+    this.mostrarTab('tab-test');
+  },
+
+  descartarPausada(id) {
+    if (!confirm('¿Descartar ese test a medias? No contará en tus estadísticas.')) return;
+    const lista = (DB.get('pausadas', []) || []).filter((x) => x._id !== id);
+    DB.set('pausadas', lista);
+    this.pintarListaTests();
+    this.toast('Test descartado');
   },
 
   /* ================= inicio ================= */
@@ -411,7 +490,33 @@ const App = {
     this.pintarInicio();
   },
 
-  abrirAjustes() { this.leerAjustesUI(); document.getElementById('modal-ajustes').classList.remove('hidden'); },
+  abrirAjustes() {
+    this.leerAjustesUI();
+    const v = document.getElementById('app-version');
+    if (v) v.textContent = APP_VERSION;
+    document.getElementById('modal-ajustes').classList.remove('hidden');
+  },
+
+  /* Borra la cache y recarga: la via para salir de un service worker viejo. */
+  async actualizarApp() {
+    try {
+      this.toast('Buscando actualización…');
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) {
+          try { await r.update(); } catch (e) {}
+        }
+      }
+      if (window.caches) {
+        const claves = await caches.keys();
+        await Promise.all(claves.map((k) => caches.delete(k)));
+      }
+      setTimeout(() => location.reload(), 700);
+    } catch (e) {
+      console.error('actualizarApp', e);
+      location.reload();
+    }
+  },
   cerrarAjustes() { document.getElementById('modal-ajustes').classList.add('hidden'); this.guardarAjustesDesdeUI(); },
 
   /* ================= sesión ================= */
@@ -887,6 +992,7 @@ const App = {
     this.exTitulo = null;
     this.exId = null;
 
+    this._irRunner = true;
     this.guardarSesion();
     this.arrancarCrono();
     this.pintarPregunta();
@@ -1206,6 +1312,10 @@ const App = {
     res.titulo = s.titulo || '';
     res.examenId = s.examenId || null;
 
+    res.fallosClaves = s.preguntas
+      .filter((p, i) => s.respuestas[i] && s.respuestas[i] !== p.correcta)
+      .map((p) => this.clave(p));
+
     this.historial.push(res);
     if (this.historial.length > 300) this.historial = this.historial.slice(-300);
 
@@ -1321,6 +1431,139 @@ const App = {
     } catch (e) {
       console.error('pintarResultados', e);
     }
+  },
+
+  /* ================= lista de tests (terminados y a medias) ================= */
+
+  setHistFiltro(f) {
+    this._histFiltro = f || 'todos';
+    this.$$('#hist-filtros [data-hist]').forEach((b) => b.classList.toggle('on', b.dataset.hist === this._histFiltro));
+    this.pintarListaTests();
+  },
+
+  pintarListaTests() {
+    const el = document.getElementById('lista-tests');
+    if (!el) return;
+
+    const pausadas = (DB.get('pausadas', []) || []).map((s) => ({
+      tipo: 'abierto',
+      id: s._id,
+      fecha: s._guardada || new Date(s.inicio || Date.now()).toISOString(),
+      modo: s.modo,
+      titulo: s.titulo || '',
+      hechas: Object.keys(s.respuestas || {}).length,
+      total: (s.preguntas || []).length
+    }));
+
+    const terminados = (this.historial || []).map((r) => ({
+      tipo: 'terminado',
+      id: r.fecha,
+      fecha: r.fecha,
+      modo: r.modo,
+      titulo: r.titulo || '',
+      ok: r.ok || 0, mal: r.mal || 0, blanco: r.blanco || 0,
+      total: r.total || 0, nota: r.nota, pct: r.pct || 0,
+      fallosClaves: r.fallosClaves || []
+    }));
+
+    const f = this._histFiltro || 'todos';
+    let lista = f === 'abiertos' ? pausadas : (f === 'terminados' ? terminados : pausadas.concat(terminados));
+    lista = lista.slice().sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+
+    if (!lista.length) {
+      el.innerHTML = '<div class="mem-vacio">' +
+        (f === 'abiertos' ? 'No tienes ningún test a medias.' :
+         f === 'terminados' ? 'Todavía no has terminado ningún test.' :
+         'Aún no hay tests. Empieza uno desde la pestaña Test.') + '</div>';
+      return;
+    }
+
+    const nombres = {
+      simulacro: 'Simulacro', test: 'Test rápido', rango: 'Por rango',
+      fallos: 'Repaso de fallos', 'fallos-sesion': 'Fallos de la sesión',
+      config: 'Test personalizado', oficial: 'Examen oficial', memoria: 'MemorIA'
+    };
+
+    el.innerHTML = lista.map((x) => {
+      const nombre = x.titulo || nombres[x.modo] || 'Test';
+      const fecha = this.fechaCorta(x.fecha);
+
+      if (x.tipo === 'abierto') {
+        const pct = x.total ? Math.round((x.hechas / x.total) * 100) : 0;
+        return '<div class="test-item abierto">' +
+          '<div class="test-item-cab"><span class="test-badge abierto">A medias</span>' +
+          '<span class="test-item-fecha">' + fecha + '</span></div>' +
+          '<div class="test-item-t">' + this.esc(nombre) + '</div>' +
+          '<div class="test-item-m">' + x.hechas + ' de ' + x.total + ' respondidas · ' + pct + '%</div>' +
+          '<div class="progress" style="margin:8px 0"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="test-nav" style="margin-top:6px">' +
+            '<button class="btn-pri" type="button" data-continuar="' + this.esc(x.id) + '">Continuar</button>' +
+            '<button class="btn-sec" type="button" data-descartar="' + this.esc(x.id) + '">Descartar</button>' +
+          '</div></div>';
+      }
+
+      const nFallos = (x.fallosClaves || []).length;
+      return '<div class="test-item terminado">' +
+        '<div class="test-item-cab"><span class="test-badge ok">' + (x.nota != null ? Number(x.nota).toFixed(2) : '—') + '</span>' +
+        '<span class="test-item-fecha">' + fecha + '</span></div>' +
+        '<div class="test-item-t">' + this.esc(nombre) + '</div>' +
+        '<div class="test-item-m">' + x.ok + ' aciertos · ' + x.mal + ' fallos · ' + x.blanco +
+          ' en blanco · ' + x.pct + '%</div>' +
+        (nFallos
+          ? '<div class="test-nav" style="margin-top:6px"><button class="btn-pri" type="button" data-repasar="' +
+            this.esc(x.fecha) + '">Repasar falladas (' + nFallos + ')</button></div>'
+          : '<div class="test-item-m" style="opacity:.6;margin-top:5px">Sin fallos que repasar</div>') +
+        '</div>';
+    }).join('');
+
+    el.querySelectorAll('[data-continuar]').forEach((b) =>
+      b.addEventListener('click', () => this.continuarPausada(b.dataset.continuar)));
+    el.querySelectorAll('[data-descartar]').forEach((b) =>
+      b.addEventListener('click', () => this.descartarPausada(b.dataset.descartar)));
+    el.querySelectorAll('[data-repasar]').forEach((b) =>
+      b.addEventListener('click', () => this.repasarFalladasDe(b.dataset.repasar)));
+  },
+
+  repasarFalladasDe(fecha) {
+    const h = (this.historial || []).find((r) => r.fecha === fecha);
+    if (!h) { this.toast('No encuentro ese test'); return; }
+    const claves = h.fallosClaves || [];
+    if (!claves.length) { this.toast('Ese test no tiene fallos que repasar'); return; }
+    const set = new Set(claves);
+    const lista = this.poolGlobal().filter((p) => set.has(this.clave(p)));
+    if (!lista.length) { this.toast('Esas preguntas ya no están en el banco'); return; }
+    this.iniciarConLista(lista, 'Repaso de falladas');
+  },
+
+  /* Crea una sesion a partir de una lista de preguntas ya resuelta. */
+  iniciarConLista(lista, titulo) {
+    if (!lista || !lista.length) return;
+    this.sesion = {
+      bancoId: this.banco ? this.banco.id : (lista[0]._banco || ''),
+      modo: 'repaso',
+      titulo: titulo || 'Repaso',
+      examenId: null,
+      preguntas: lista.map((p) => ({
+        n: p.n,
+        _banco: p._banco || (this.banco ? this.banco.id : ''),
+        ejercicio: p.ejercicio || 1,
+        enunciado: p.enunciado,
+        opciones: p.opciones,
+        correcta: p.correcta,
+        reserva: !!p.reserva,
+        fuente: this.fuenteDe(p),
+        justificacion: p.justificacion || '',
+        base: p.base || ''
+      })),
+      respuestas: {}, corregidas: {}, contadas: {}, descartadas: {},
+      idx: 0, inicio: Date.now(), fin: null, minutos: 0,
+      penal: this.ajustes.penal, correccionInmediata: false, tiempo: 0
+    };
+    this._irRunner = true;
+    this.guardarSesion();
+    this.arrancarCrono();
+    this.pintarPregunta();
+    this.mostrarTab('tab-test');
   },
 
   /* ================= estadísticas ================= */
@@ -1867,6 +2110,7 @@ const App = {
       correccionInmediata: true,   // en MemorIA siempre corrige al momento
       tiempo: 0
     };
+    this._irRunner = true;
     this.guardarSesion();
     this.arrancarCrono();
     this.pintarPregunta();

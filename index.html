@@ -447,6 +447,16 @@
         </div>
 
         <div class="card">
+          <div class="card-label">Tus tests</div>
+          <div class="fchips" id="hist-filtros">
+            <button class="fchip on" type="button" data-hist="todos">Todos</button>
+            <button class="fchip" type="button" data-hist="abiertos">A medias</button>
+            <button class="fchip" type="button" data-hist="terminados">Terminados</button>
+          </div>
+          <div id="lista-tests" class="lista-tests"></div>
+        </div>
+
+        <div class="card">
           <div class="card-label">Fallos de esta sesión</div>
           <div id="lista-fallos" class="lista-fallos"></div>
         </div>
@@ -562,6 +572,11 @@
         <input type="checkbox" id="set-oscuro">
         <span>Modo oscuro</span>
       </label>
+
+      <div class="campo-fila" style="justify-content:space-between">
+        <span>Versión <b id="app-version">—</b></span>
+        <button id="btn-actualizar" class="btn-sec" type="button">Buscar actualización</button>
+      </div>
 
       <div class="modal-nota">
         Los parámetros del simulacro hay que confirmarlos con la convocatoria
