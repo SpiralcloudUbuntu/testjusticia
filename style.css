@@ -638,3 +638,44 @@ body.dark .btn-blanco { background:#3a2a1c; color:#fdba74; border-color:#7c4a1e;
   background: #eef2f7; color: #475569; margin-left: 6px;
 }
 .hist-chip.muy { background: #fee2e2; color: #b91c1c; }
+
+/* =========================== DESCARTAR OPCIONES =========================== */
+/* Pedido por Guti: poder tachar una opcion de la que se duda ("la A no es,
+   dudo entre B y C") sin que cuente como respuesta. */
+.opcion{position:relative;padding-right:54px}
+.opcion-x{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+  background:var(--bg);color:var(--ink2);font-size:.78rem;font-weight:800;
+  cursor:pointer;border:1px solid var(--borde);line-height:1;
+  transition:background .15s,color .15s,transform .15s;
+}
+.opcion-x:hover{background:#fee2e2;color:#b91c1c;border-color:#fecaca;transform:translateY(-50%) scale(1.1)}
+.opcion.descartada{opacity:.48;border-style:dashed;background:var(--bg)}
+.opcion.descartada .texto{text-decoration:line-through;text-decoration-thickness:2px}
+.opcion.descartada .letra{filter:grayscale(1)}
+.opcion.descartada .opcion-x{background:#fee2e2;color:#b91c1c;border-color:#fecaca;opacity:1}
+body.dark .opcion-x{background:#1b2436;color:#9aa8bf;border-color:#33405a}
+body.dark .opcion.descartada{opacity:.42}
+
+/* contador de descartadas bajo el enunciado */
+.descartadas-nota{
+  display:none;margin:-8px 0 14px;font-size:.78rem;font-weight:700;color:var(--ink2);
+}
+.descartadas-nota.visible{display:block}
+
+/* =========================== RACHA / AVISO =========================== */
+.racha{
+  margin-top:12px;padding:11px 14px;border-radius:var(--radio);
+  font-size:.88rem;font-weight:700;line-height:1.4;
+  background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.25);color:#1d4ed8;
+}
+.racha.sube{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:#15803d}
+.racha.baja{background:rgba(220,53,69,.10);border-color:rgba(220,53,69,.30);color:#b91c1c}
+body.dark .racha{color:#93c5fd;background:rgba(37,99,235,.14);border-color:rgba(37,99,235,.35)}
+body.dark .racha.sube{color:#86efac;background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.35)}
+body.dark .racha.baja{color:#fca5a5;background:rgba(220,53,69,.14);border-color:rgba(220,53,69,.35)}
+
+/* =========================== FILTROS DE REVISION =========================== */
+.rev-filtros{margin-bottom:12px}
+.rev-vacio{padding:14px;text-align:center;color:var(--ink2);font-size:.9rem}

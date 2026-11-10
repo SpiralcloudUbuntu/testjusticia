@@ -436,6 +436,7 @@
           <div id="resultado-nota" class="nota">—</div>
           <div id="resultado-titulo" class="card-titulo">Resultado</div>
           <div id="resultado-detalle" class="card-meta"></div>
+          <div id="resultado-racha" class="racha hidden"></div>
           <div class="afb">
             <span class="afb-ok" id="res-afb-ok" style="width:0%"></span>
             <span class="afb-mal" id="res-afb-mal" style="width:0%"></span>
@@ -450,6 +451,12 @@
 
         <div class="card">
           <div class="card-label">Revision completa</div>
+          <div class="fchips rev-filtros" id="rev-filtros">
+            <button class="fchip on" type="button" data-rev="todas">Todas</button>
+            <button class="fchip" type="button" data-rev="falladas">Falladas</button>
+            <button class="fchip" type="button" data-rev="blancas">Blancas</button>
+            <button class="fchip" type="button" data-rev="acertadas">Acertadas</button>
+          </div>
           <div id="lista-revision" class="lista-revision hidden"></div>
           <div class="test-nav"><button id="btn-revision" class="btn-sec" type="button">Mostrar todas las preguntas</button></div>
         </div>
@@ -521,6 +528,11 @@
       <label class="campo-fila">
         <input type="checkbox" id="set-barajar">
         <span>Barajar el orden de las preguntas</span>
+      </label>
+
+      <label class="campo-fila">
+        <input type="checkbox" id="set-oscuro">
+        <span>Modo oscuro</span>
       </label>
 
       <div class="modal-nota">

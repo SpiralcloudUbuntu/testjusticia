@@ -11,7 +11,8 @@ const AJUSTES_DEF = {
   simMin: 0,
   penal: 0,
   correccionInmediata: false,
-  barajar: true
+  barajar: true,
+  oscuro: false
 };
 
 const App = {
@@ -54,6 +55,7 @@ const App = {
     this.banco = this.bancos[0] || null;
 
     this.leerAjustesUI();
+    this.aplicarTema();
     this.pintarInicio();
     this.pintarStats();
     this.enganchar();
@@ -98,6 +100,9 @@ const App = {
     });
     document.getElementById('btn-blanco').addEventListener('click', () => this.blanco());
     document.getElementById('btn-revision').addEventListener('click', () => this.toggleRevision());
+    this.$$('#rev-filtros [data-rev]').forEach((b) => {
+      b.addEventListener('click', () => this.setRevFiltro(b.dataset.rev));
+    });
 
     document.querySelectorAll('[data-modo]').forEach((b) => {
       b.addEventListener('click', () => this.empezar(b.dataset.modo));
@@ -121,7 +126,7 @@ const App = {
     document.getElementById('file-import').addEventListener('change', (e) => this.importar(e));
     document.getElementById('btn-reset').addEventListener('click', () => this.reset());
 
-    ['testN', 'simN', 'simMin', 'penal', 'correccionInmediata', 'barajar'].forEach((k) => {
+    ['testN', 'simN', 'simMin', 'penal', 'correccionInmediata', 'barajar', 'oscuro'].forEach((k) => {
       const el = document.getElementById('set-' + this.idCampo(k));
       if (el) el.addEventListener('change', () => this.guardarAjustesDesdeUI());
     });
@@ -189,7 +194,7 @@ const App = {
   },
 
   idCampo(k) {
-    return { testN: 'test-n', simN: 'sim-n', simMin: 'sim-min', penal: 'penal', correccionInmediata: 'correccion-inmediata', barajar: 'barajar' }[k];
+    return { testN: 'test-n', simN: 'sim-n', simMin: 'sim-min', penal: 'penal', correccionInmediata: 'correccion-inmediata', barajar: 'barajar', oscuro: 'oscuro' }[k];
   },
 
   /* ================= utilidades ================= */
@@ -367,6 +372,11 @@ const App = {
     document.getElementById('set-penal').value = this.ajustes.penal;
     document.getElementById('set-correccion-inmediata').checked = !!this.ajustes.correccionInmediata;
     document.getElementById('set-barajar').checked = !!this.ajustes.barajar;
+    document.getElementById('set-oscuro').checked = !!this.ajustes.oscuro;
+  },
+
+  aplicarTema() {
+    document.body.classList.toggle('dark', !!this.ajustes.oscuro);
   },
 
   guardarAjustesDesdeUI() {
@@ -376,9 +386,11 @@ const App = {
       simMin: Math.max(0, parseInt(document.getElementById('set-sim-min').value, 10) || 0),
       penal: Math.max(0, Math.min(1, parseFloat(document.getElementById('set-penal').value) || 0)),
       correccionInmediata: document.getElementById('set-correccion-inmediata').checked,
-      barajar: document.getElementById('set-barajar').checked
+      barajar: document.getElementById('set-barajar').checked,
+      oscuro: document.getElementById('set-oscuro').checked
     };
     DB.set('ajustes', this.ajustes);
+    this.aplicarTema();
     this.pintarInicio();
   },
 
@@ -841,6 +853,7 @@ const App = {
       respuestas: {},
       corregidas: {},
       contadas: {},
+      descartadas: {},
       idx: 0,
       inicio: Date.now(),
       fin: null,
@@ -916,6 +929,7 @@ const App = {
       const elegida = s.respuestas[s.idx];
       const corregida = !!s.corregidas[s.idx];
 
+      const descartadas = (s.descartadas && s.descartadas[s.idx]) || {};
       ['a', 'b', 'c', 'd'].forEach((l) => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -929,9 +943,21 @@ const App = {
         } else if (l === elegida) {
           btn.classList.add('elegida');
         }
+        if (!corregida && descartadas[l]) btn.classList.add('descartada');
 
         btn.innerHTML = '<span class="letra">' + l + '</span><span class="texto">' + this.esc(p.opciones[l] || '') + '</span>';
         btn.addEventListener('click', () => this.responder(l));
+
+        if (!corregida) {
+          const x = document.createElement('span');
+          x.className = 'opcion-x';
+          x.textContent = descartadas[l] ? '↺' : '✕';
+          x.title = descartadas[l] ? 'Recuperar esta opción' : 'Descartar esta opción';
+          x.setAttribute('role', 'button');
+          x.addEventListener('click', (ev) => { ev.stopPropagation(); this.descartar(l); });
+          btn.appendChild(x);
+        }
+
         cont.appendChild(btn);
       });
 
@@ -996,21 +1022,35 @@ const App = {
       '<div class="just-txt">' + this.esc(txt) + '</div>';
   },
 
-  toggleRevision() {
+  setRevFiltro(f) {
+    this._revFiltro = f || 'todas';
+    this.$$('#rev-filtros [data-rev]').forEach((b) => b.classList.toggle('on', b.dataset.rev === this._revFiltro));
+    const cont = document.getElementById('lista-revision');
+    if (cont && !cont.classList.contains('hidden')) this.toggleRevision(true);
+  },
+
+  toggleRevision(forzar) {
     const cont = document.getElementById('lista-revision');
     const btn = document.getElementById('btn-revision');
     const s = this._ultimaSesion;
     if (!cont || !btn || !s) return;
-    if (!cont.classList.contains('hidden')) {
+    if (!forzar && !cont.classList.contains('hidden')) {
       cont.classList.add('hidden');
       btn.textContent = 'Mostrar todas las preguntas';
       return;
     }
+    const filtro = this._revFiltro || 'todas';
     let html = '';
+    let n = 0;
     s.preguntas.forEach((p, i) => {
       const r = s.respuestas[i];
-      const cls = !r ? 'bl' : (r === p.correcta ? 'ok' : 'mal');
-      const est = !r ? 'En blanco' : (r === p.correcta ? 'Correcta' : 'Fallada');
+      const tipo = !r ? 'blanca' : (r === p.correcta ? 'acertada' : 'fallada');
+      if (filtro === 'falladas' && tipo !== 'fallada') return;
+      if (filtro === 'blancas' && tipo !== 'blanca') return;
+      if (filtro === 'acertadas' && tipo !== 'acertada') return;
+      n++;
+      const cls = tipo === 'blanca' ? 'bl' : (tipo === 'acertada' ? 'ok' : 'mal');
+      const est = tipo === 'blanca' ? 'En blanco' : (tipo === 'acertada' ? 'Correcta' : 'Fallada');
       const pre = (p.fuente === 'preparador');
       html += '<div class="rev ' + cls + '">' +
         '<div class="rev-cab"><span class="rev-num">' + (i + 1) + '</span>' +
@@ -1018,14 +1058,15 @@ const App = {
         '<span class="badge ' + (pre ? 'pre' : 'ofi') + '">' + (pre ? 'Daniel Dorta' : 'Oficial') + '</span></div>' +
         '<div class="rev-enun">' + this.esc(p.enunciado) + '</div>' +
         (r && r !== p.correcta ? '<div class="rev-tu">Tu respuesta: ' + r.toUpperCase() + ' — ' + this.esc(p.opciones[r] || '') + '</div>' : '') +
+        (tipo === 'blanca' ? '<div class="rev-tu">No contestada</div>' : '') +
         '<div class="rev-ok">Correcta: ' + p.correcta.toUpperCase() + ' — ' + this.esc(p.opciones[p.correcta] || '') + '</div>' +
         (p.justificacion ? '<div class="rev-just"><b>' + this.esc(p.base || 'Base legal') + '</b> ' + this.esc(p.justificacion) + '</div>'
                          : '<div class="rev-just">Sin justificacion cargada.</div>') +
         '</div>';
     });
-    cont.innerHTML = html;
+    cont.innerHTML = html || '<div class="rev-vacio">No hay preguntas en ese filtro.</div>';
     cont.classList.remove('hidden');
-    btn.textContent = 'Ocultar la revision';
+    btn.textContent = 'Ocultar la revision (' + n + ')';
   },
 
   responder(letra) {
@@ -1033,6 +1074,7 @@ const App = {
     if (!s) return;
     if (s.correccionInmediata && s.corregidas[s.idx]) return;
 
+    if (s.descartadas) delete s.descartadas[s.idx];
     s.respuestas[s.idx] = letra;
     if (s.correccionInmediata) {
       s.corregidas[s.idx] = true;
@@ -1045,10 +1087,25 @@ const App = {
     this.pintarPregunta();
   },
 
+  /* Tachar una opcion sin responderla (dudar entre dos y descartar el resto). */
+  descartar(letra) {
+    const s = this.sesion;
+    if (!s) return;
+    if (s.correccionInmediata && s.corregidas[s.idx]) return;
+    s.descartadas = s.descartadas || {};
+    const d = s.descartadas[s.idx] = s.descartadas[s.idx] || {};
+    if (d[letra]) delete d[letra]; else d[letra] = true;
+    // Si estaba elegida y la tachas, se retira la respuesta.
+    if (d[letra] && s.respuestas[s.idx] === letra) delete s.respuestas[s.idx];
+    this.guardarSesion();
+    this.pintarPregunta();
+  },
+
   blanco() {
     const s = this.sesion;
     if (!s) return;
     if (s.correccionInmediata && s.corregidas[s.idx]) return;
+    if (s.descartadas) delete s.descartadas[s.idx];
     s.respuestas[s.idx] = '';
     if (s.correccionInmediata) {
       s.corregidas[s.idx] = true;
@@ -1171,6 +1228,36 @@ const App = {
         'Acierto: <strong>' + res.pct + '%</strong> · Tiempo: ' + this.mmss(res.tiempo) +
         '<br>Nota orientativa sobre 10' + (this._ultimaSesion && this._ultimaSesion.penal > 0
           ? ' (con penalización de ' + this._ultimaSesion.penal + ' por fallo)' : ' (sin penalización)') + '.';
+
+      // Mensaje de racha: compara esta nota con la media de las anteriores.
+      const rachaEl = document.getElementById('resultado-racha');
+      if (rachaEl) {
+        const h = this.historial;
+        const actual = h[h.length - 1] || res;
+        const previas = h.slice(Math.max(0, h.length - 6), h.length - 1);
+        rachaEl.className = 'racha hidden';
+        rachaEl.textContent = '';
+        if (previas.length >= 3) {
+          const media = previas.reduce((a, r) => a + (r.nota || 0), 0) / previas.length;
+          const dif = (actual.nota || 0) - media;
+          if (dif > 0.2) {
+            rachaEl.className = 'racha sube';
+            rachaEl.textContent = 'Vas en racha: esta nota sube ' + dif.toFixed(2) +
+              ' puntos sobre tu media de las últimas ' + previas.length + ' pruebas.';
+          } else if (dif < -0.2) {
+            rachaEl.className = 'racha baja';
+            rachaEl.textContent = 'Esta nota baja ' + Math.abs(dif).toFixed(2) +
+              ' puntos respecto a tu media reciente. Repasa los fallos antes de la siguiente.';
+          } else {
+            rachaEl.className = 'racha';
+            rachaEl.textContent = 'Vas estable: misma franja que tus últimas ' + previas.length + ' pruebas.';
+          }
+        }
+      }
+
+      // La revision arranca siempre en "todas".
+      this._revFiltro = 'todas';
+      this.$$('#rev-filtros [data-rev]').forEach((b) => b.classList.toggle('on', b.dataset.rev === 'todas'));
 
       const tot = res.total || 1;
       const wo = document.getElementById('res-afb-ok');
