@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -40,23 +40,11 @@ const App = {
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
     }
-    this.ajustes = Object.assign({}, AJUSTES_DEF, DB.get('ajustes', {}) || {});
-    this.filtroFuente = DB.get('filtroFuente', 'todas') || 'todas';
-    this.historial = DB.get('historial', []) || [];
-    this.porPregunta = DB.get('porPregunta', {}) || {};
-    this.fallos = DB.get('fallos', []) || [];
-    this.examenesHechos = DB.get('examenesHechos', {}) || {};
-    this.cfg = Object.assign({ n: 25, min: 0, conjunto: 'todas' }, DB.get('cfg', {}) || {});
-
-    const importados = DB.get('bancos', []) || [];
-    const base = Array.isArray(window.BANCOS) ? window.BANCOS : [];
-    const vistos = new Set();
-    this.bancos = base.concat(importados).filter((b) => {
-      if (!b || !b.id || !Array.isArray(b.preguntas)) return false;
-      if (vistos.has(b.id)) return false;
-      vistos.add(b.id);
-      return true;
-    });
+    // La cuenta es GLOBAL (sin sufijo): decide de qué espacio de datos se lee.
+    // 'senor' = Señor de las Pruebas (Guti). Usa las claves de siempre, así que
+    // los datos que ya existían se conservan intactos.
+    this.cuenta = DB.get('cuenta', 'senor') || 'senor';
+    this.cargarEstado();
 
     this.banco = this.bancos[0] || null;
 
@@ -72,15 +60,88 @@ const App = {
     this.enganchar();
     this.vistaTest('portada');
 
-    const guardada = DB.get('sesion', null);
-    if (guardada && guardada.bancoId && this.bancos.some((b) => b.id === guardada.bancoId)) {
-      this.banco = this.bancos.find((b) => b.id === guardada.bancoId);
+    const guardada = this.dget('sesion', null);
+    if (guardada && Array.isArray(guardada.preguntas) && guardada.preguntas.length) {
+      // Al reabrir la app, el test que estaba en curso pasa a "a medias":
+      // se ve en Resultados y se puede continuar desde ahí.
       this.sesion = guardada;
-      this.arrancarCrono();
-      this.pintarPregunta();
-      this.mostrarTab('tab-test');
-      this.toast('Test recuperado dónde lo dejaste');
+      this.pausarSesion();
     }
+  },
+
+  /* ---------- cuentas (espacios de datos separados) ---------- */
+
+  sufijoCuenta() {
+    return (this.cuenta && this.cuenta !== 'senor') ? ':' + this.cuenta : '';
+  },
+
+  nombreCuenta() {
+    return this.cuenta === 'carolina' ? 'Carolina' : 'Señor de las Pruebas';
+  },
+
+  dget(k, d) { return DB.get(k + this.sufijoCuenta(), d); },
+  dset(k, v) { return DB.set(k + this.sufijoCuenta(), v); },
+  ddel(k) { return DB.del(k + this.sufijoCuenta()); },
+
+  dborrarTodo() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith(DB.PREFIX))
+        .forEach((k) => {
+          const esCarolina = k.endsWith(':carolina');
+          const esSenor = !k.endsWith(':carolina') && !k.endsWith(':senor');
+          if (this.cuenta === 'carolina' ? esCarolina : esSenor) localStorage.removeItem(k);
+        });
+    } catch (e) { console.error(e); }
+  },
+
+  /* Carga todo el estado de la cuenta activa. */
+  cargarEstado() {
+    this.ajustes = Object.assign({}, AJUSTES_DEF, this.dget('ajustes', {}) || {});
+    this.filtroFuente = this.dget('filtroFuente', 'todas') || 'todas';
+    this.historial = this.dget('historial', []) || [];
+    this.porPregunta = this.dget('porPregunta', {}) || {};
+    this.fallos = this.dget('fallos', []) || [];
+    this.examenesHechos = this.dget('examenesHechos', {}) || {};
+    this.cfg = Object.assign({ n: 25, min: 0, conjunto: 'todas' }, this.dget('cfg', {}) || {});
+    this.mem = null;
+    this.sesion = null;
+
+    const importados = this.dget('bancos', []) || [];
+    const base = Array.isArray(window.BANCOS) ? window.BANCOS : [];
+    const vistos = new Set();
+    this.bancos = base.concat(importados).filter((b) => {
+      if (!b || !b.id || !Array.isArray(b.preguntas)) return false;
+      if (vistos.has(b.id)) return false;
+      vistos.add(b.id);
+      return true;
+    });
+  },
+
+  cambiarCuenta(c) {
+    if (!c || c === this.cuenta) return;
+    if (this.sesion) {
+      if (!confirm('Tienes un test en curso. Al cambiar de cuenta se guardará como "a medias". ¿Continuar?')) {
+        document.getElementById('set-cuenta').value = this.cuenta;
+        return;
+      }
+      this.pausarSesion();
+    }
+    this.cuenta = c;
+    DB.set('cuenta', c);
+    this.cargarEstado();
+    this.banco = this.bancos[0] || null;
+    this._memFiltro = 'hoy';
+    this._histFiltro = 'todos';
+    this.leerAjustesUI();
+    this.aplicarTema();
+    this.cargarMemoria();
+    this.pintarInicio();
+    this.pintarStats();
+    this.pintarMemoria();
+    this.pintarListaTests();
+    this.vistaTest('portada');
+    this.toast('Cuenta: ' + this.nombreCuenta());
   },
 
   enganchar() {
@@ -91,10 +152,7 @@ const App = {
       });
     });
 
-    this.$$('.fchip').forEach((c) => {
-      if (!c.dataset.fuente) return;   // los chips del configurador (conjunto) tienen su propio manejador
-      c.addEventListener('click', () => this.setFiltroFuente(c.dataset.fuente));
-    });
+    // Los chips de fuente del configurador tienen su propio manejador (más abajo).
 
     const mt = document.getElementById('menu-toggle');
     if (mt) mt.addEventListener('click', () => this.abrirMenu());
@@ -149,6 +207,9 @@ const App = {
     document.getElementById('btn-cerrar-pdf').addEventListener('click', () => this.cerrarModalPDF());
     document.getElementById('btn-cancelar-pdf').addEventListener('click', () => this.cerrarModalPDF());
     document.getElementById('btn-actualizar').addEventListener('click', () => this.actualizarApp());
+    document.getElementById('set-cuenta').addEventListener('change', (e) => this.cambiarCuenta(e.target.value));
+    document.getElementById('inicio-empezar-falladas').addEventListener('click', () => this.empezarFalladasInicio());
+    document.getElementById('inicio-empezar-memoria').addEventListener('click', () => this.empezarMemoria());
     document.getElementById('btn-reset').addEventListener('click', () => this.reset());
 
     ['testN', 'simN', 'simMin', 'penal', 'correccionInmediata', 'barajar', 'oscuro'].forEach((k) => {
@@ -175,12 +236,12 @@ const App = {
     /* --- configurador de test --- */
     const inpN = document.getElementById('cfg-n');
     if (inpN) inpN.addEventListener('change', () => {
-      const max = this.contarConjunto(this.cfg.conjunto) || 1;
+      const max = this.contarConjunto(this.cfg.tipo) || 1;
       const v = Math.max(1, Math.min(parseInt(inpN.value, 10) || 1, max));
       this.setCfg('n', v);
     });
     this.$$('[data-cfg-n]').forEach((b) => b.addEventListener('click', () => {
-      const max = this.contarConjunto(this.cfg.conjunto) || 1;
+      const max = this.contarConjunto(this.cfg.tipo) || 1;
       const v = b.dataset.cfgN === 'max' ? max : parseInt(b.dataset.cfgN, 10);
       this.setCfg('n', Math.max(1, Math.min(v, max)));
     }));
@@ -188,21 +249,41 @@ const App = {
       if (this.ajustes.correccionInmediata) { this.toast('En modo estudio no hay tiempo: cambia a modo examen'); return; }
       this.setCfg('min', parseInt(b.dataset.cfgMin, 10) || 0);
     }));
-    this.$$('[data-cfg-pen]').forEach((b) => b.addEventListener('click', () => {
-      this.ajustes.penal = parseFloat(b.dataset.cfgPen) || 0;
-      DB.set('ajustes', this.ajustes);
-      this.leerAjustesUI();
+
+    this.$$('#cfg-bloque [data-bloque]').forEach((b) => b.addEventListener('click', () => {
+      this.cfg.bloque = b.dataset.bloque;
+      const max = this.contarConjunto(this.cfg.tipo) || 0;
+      if (max) this.cfg.n = Math.max(1, Math.min(this.cfg.n || max, max));
+      this.dset('cfg', this.cfg);
       this.pintarConfig();
     }));
-    this.$$('#cfg-conjunto [data-conjunto]').forEach((b) => b.addEventListener('click', () => {
-      const max = this.contarConjunto(b.dataset.conjunto) || 0;
-      if (!max) { this.toast('No hay preguntas en ese conjunto'); return; }
-      const n = Math.min(this.cfg.n || max, max);
-      this.cfg.conjunto = b.dataset.conjunto;
-      this.cfg.n = Math.max(1, n);
-      DB.set('cfg', this.cfg);
+
+    this.$$('#cfg-tipo [data-tipo]').forEach((b) => b.addEventListener('click', () => {
+      const max = this.contarConjunto(b.dataset.tipo) || 0;
+      if (!max) { this.toast('No hay preguntas de ese tipo con los filtros actuales'); return; }
+      this.cfg.tipo = b.dataset.tipo;
+      this.cfg.n = Math.max(1, Math.min(this.cfg.n || max, max));
+      this.dset('cfg', this.cfg);
       this.pintarConfig();
     }));
+
+    this.$$('#cfg-fuente [data-fuente]').forEach((b) => b.addEventListener('click', () => {
+      this.cfg.fuente = b.dataset.fuente;
+      const max = this.contarConjunto(this.cfg.tipo) || 0;
+      if (max) this.cfg.n = Math.max(1, Math.min(this.cfg.n || max, max));
+      this.dset('cfg', this.cfg);
+      this.pintarConfig();
+    }));
+
+    const selEx = document.getElementById('cfg-examen');
+    if (selEx) selEx.addEventListener('change', () => {
+      this.cfg.examen = selEx.value;
+      const max = this.contarConjunto(this.cfg.tipo) || 0;
+      if (max) this.cfg.n = Math.max(1, Math.min(this.cfg.n || max, max));
+      this.dset('cfg', this.cfg);
+      this.pintarConfig();
+    });
+
     const cfgGo = document.getElementById('cfg-empezar');
     if (cfgGo) cfgGo.addEventListener('click', () => this.empezarConfig());
 
@@ -340,22 +421,22 @@ const App = {
     s._pausada = true;
     s._guardada = new Date().toISOString();
     s._id = s._id || ('ses-' + Date.now());
-    const lista = DB.get('pausadas', []) || [];
+    const lista = this.dget('pausadas', []) || [];
     const i = lista.findIndex((x) => x._id === s._id);
     if (i >= 0) lista[i] = s; else lista.push(s);
-    DB.set('pausadas', lista);
-    DB.del('sesion');
+    this.dset('pausadas', lista);
+    this.ddel('sesion');
     clearInterval(this._timer);
     this.sesion = null;
     this.toast('Test guardado. Lo tienes en Resultados.');
   },
 
   continuarPausada(id) {
-    const lista = DB.get('pausadas', []) || [];
+    const lista = this.dget('pausadas', []) || [];
     const i = lista.findIndex((x) => x._id === id);
     if (i < 0) { this.toast('Ese test ya no existe'); return; }
     const s = lista.splice(i, 1)[0];
-    DB.set('pausadas', lista);
+    this.dset('pausadas', lista);
     delete s._pausada;
     delete s._guardada;
     this.sesion = s;
@@ -368,8 +449,8 @@ const App = {
 
   descartarPausada(id) {
     if (!confirm('¿Descartar ese test a medias? No contará en tus estadísticas.')) return;
-    const lista = (DB.get('pausadas', []) || []).filter((x) => x._id !== id);
-    DB.set('pausadas', lista);
+    const lista = (this.dget('pausadas', []) || []).filter((x) => x._id !== id);
+    this.dset('pausadas', lista);
     this.pintarListaTests();
     this.toast('Test descartado');
   },
@@ -378,49 +459,66 @@ const App = {
 
   pintarInicio() {
     try {
-      if (!this.banco) {
-        document.getElementById('banco-titulo').textContent = 'Sin banco de preguntas';
-        document.getElementById('banco-meta').textContent = '';
-        document.getElementById('aviso-banco').classList.remove('hidden');
-        document.getElementById('aviso-banco').textContent =
-          'No hay ningún banco cargado. Hay que generar uno desde los PDFs de examen.';
-        return;
+      const c = this.cuentaFuentes();
+      const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+      set('chip-total', c.conRespuesta);
+      set('chip-ofi', c.oficial);
+      set('chip-pre', c.preparador);
+
+      // --- continuar el test a medias mas reciente ---
+      const cont = document.getElementById('inicio-continuar');
+      if (cont) {
+        const pausadas = (this.dget('pausadas', []) || []).slice()
+          .sort((a, b) => String(b._guardada || '').localeCompare(String(a._guardada || '')));
+        if (!pausadas.length) {
+          cont.innerHTML = '<div class="card"><div class="card-meta">No tienes ningún test a medias. Empieza uno desde la pestaña Test.</div></div>';
+        } else {
+          const s = pausadas[0];
+          const hechas = Object.keys(s.respuestas || {}).length;
+          const total = (s.preguntas || []).length;
+          const pct = total ? Math.round(hechas / total * 100) : 0;
+          cont.innerHTML = '<div class="test-item abierto">' +
+            '<div class="test-item-cab"><span class="test-badge abierto">A medias</span>' +
+            '<span class="test-item-fecha">' + this.fechaCorta(s._guardada) + '</span></div>' +
+            '<div class="test-item-t">' + this.esc(s.titulo || 'Test') + '</div>' +
+            '<div class="test-item-m">' + hechas + ' de ' + total + ' respondidas · ' + pct + '%</div>' +
+            '<div class="progress" style="margin:8px 0"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+            '<div class="test-nav" style="margin-top:6px">' +
+              '<button class="btn-pri" type="button" data-inicio-continuar="' + this.esc(s._id) + '">Continuar</button>' +
+            '</div></div>';
+          const b = cont.querySelector('[data-inicio-continuar]');
+          if (b) b.addEventListener('click', () => this.continuarPausada(s._id));
+        }
       }
 
-      this.pintarChipsFuente();
-      const nPreg = this.preguntasDisponibles().length;
-      document.getElementById('banco-titulo').textContent = 'Pool de exámenes oficiales';
-      document.getElementById('banco-meta').innerHTML =
-        '<strong>' + nPreg + ' preguntas</strong> · ' + (this.bancos || []).length +
-        ' exámenes oficiales de Tramitación Procesal' +
-        '<br>El recuento por pregunta es común al pool y a cada examen suelto.';
-
-      if ((this.bancos || []).length > 1) {
-        const det = document.createElement('details');
-        det.style.cssText = 'margin-top:10px';
-        det.innerHTML = '<summary style="cursor:pointer;font-size:14px">Ver los ' +
-          this.bancos.length + ' exámenes que hay en el pool</summary>' +
-          '<ul style="margin:8px 0 0 0;padding-left:18px;font-size:14px;line-height:1.55">' +
-          this.bancos.map((bb) => '<li>' + this.esc(bb.titulo) + ' — ' +
-            (bb.preguntas || []).filter((q) => q.correcta).length + ' preguntas</li>').join('') +
-          '</ul>';
-        document.getElementById('banco-meta').appendChild(det);
+      // --- repaso de falladas ---
+      const nFall = this.fallosDeBanco().length;
+      const tit = document.getElementById('inicio-falladas-tit');
+      if (tit) tit.innerHTML = nFall
+        ? 'Tienes <b>' + nFall + '</b> preguntas falladas pendientes.'
+        : 'No tienes fallos pendientes.';
+      const inpF = document.getElementById('inicio-n-falladas');
+      if (inpF) {
+        inpF.max = Math.max(1, nFall || 1);
+        const v = parseInt(inpF.value, 10) || 25;
+        inpF.value = Math.min(v, Math.max(1, nFall || 1));
       }
 
-      document.getElementById('desc-simulacro').textContent =
-        Math.min(this.ajustes.simN, nPreg) + ' preguntas' + (this.ajustes.simMin > 0 ? ' · ' + this.ajustes.simMin + ' min' : '');
-      document.getElementById('desc-test').textContent = Math.min(this.ajustes.testN, nPreg) + ' preguntas aleatorias';
-      document.getElementById('desc-fallos').textContent =
-        this.fallosDeBanco().length + ' pendientes';
-
-      const fnota = document.getElementById('fnota');
-      if (fnota) {
-        fnota.textContent = this.filtroFuente === 'todas'
-          ? 'Los tests usan todo el banco (' + nPreg + ' preguntas con respuesta). Filtra si quieres estudiar solo una fuente.'
-          : (nPreg > 0
-              ? 'Filtrando ' + (this.filtroFuente === 'oficial' ? 'preguntas oficiales' : 'material de Daniel Dorta') + ': ' + nPreg + ' preguntas disponibles.'
-              : 'No hay preguntas de esa fuente en el banco actual.');
+      // --- MemorIA ---
+      const pend = this.pendientesHoy().length;
+      const mt = document.getElementById('inicio-memoria-tit');
+      if (mt) mt.innerHTML = pend
+        ? '<b>' + pend + '</b> preguntas para repasar hoy.'
+        : 'Nada pendiente hoy en MemorIA.';
+      const mm = document.getElementById('inicio-memoria-meta');
+      if (mm) {
+        const mem = this.cargarMemoria();
+        const total = Object.keys(mem).length;
+        const dom = Object.keys(mem).map((k) => mem[k]).filter((m) => m.dominada).length;
+        mm.textContent = total + ' en total · ' + dom + ' dominadas.';
       }
+      const bm = document.getElementById('inicio-empezar-memoria');
+      if (bm) bm.disabled = !pend;
 
       this.pintarResumenInicio();
     } catch (e) {
@@ -462,6 +560,8 @@ const App = {
   /* ================= ajustes ================= */
 
   leerAjustesUI() {
+    const sc = document.getElementById('set-cuenta');
+    if (sc) sc.value = this.cuenta || 'senor';
     document.getElementById('set-test-n').value = this.ajustes.testN;
     document.getElementById('set-sim-n').value = this.ajustes.simN;
     document.getElementById('set-sim-min').value = this.ajustes.simMin;
@@ -485,7 +585,7 @@ const App = {
       barajar: document.getElementById('set-barajar').checked,
       oscuro: document.getElementById('set-oscuro').checked
     };
-    DB.set('ajustes', this.ajustes);
+    this.dset('ajustes', this.ajustes);
     this.aplicarTema();
     this.pintarInicio();
   },
@@ -535,7 +635,7 @@ const App = {
 
   setFiltroFuente(f) {
     this.filtroFuente = f || 'todas';
-    DB.set('filtroFuente', this.filtroFuente);
+    this.dset('filtroFuente', this.filtroFuente);
     this.pintarChipsFuente();
     this.pintarInicio();
     this.pintarStats();
@@ -556,7 +656,7 @@ const App = {
 
   setModo(correccion) {
     this.ajustes.correccionInmediata = (correccion === 'estudio');
-    DB.set('ajustes', this.ajustes);
+    this.dset('ajustes', this.ajustes);
     this.pintarSegModo();
     this.leerAjustesUI();
     if (this.sesion) {
@@ -739,9 +839,34 @@ const App = {
 
   /* ================= configurador de test ================= */
 
+  /* Bloque de una pregunta: campo explicito o deducido del titulo del examen.
+     En Tramitación: test (teórico), caso práctico y informática (Word/Excel). */
+  bloqueDe(p) {
+    if (p && p.bloque) return p.bloque;
+    const id = (p && p._banco) || '';
+    const b = (this.bancos || []).find((x) => x.id === id);
+    const t = ((b ? (b.titulo || '') + ' ' + (b.examen || '') : '')).toLowerCase();
+    if (/word|excel|inform[aá]tica|ofim[aá]tica|tercer ejercicio/.test(t)) return 'informatica';
+    if (/caso pr[aá]ctico|supuesto pr[aá]ctico|segundo ejercicio/.test(t)) return 'caso';
+    return 'test';
+  },
+
+  /* Pool global filtrado por fuente, bloque y examen concreto. */
+  poolFiltrado() {
+    const c = this.cfg || {};
+    let lista = this.poolGlobal();
+    const fuente = c.fuente || 'todas';
+    const bloque = c.bloque || 'todos';
+    const examen = c.examen || 'todos';
+    if (fuente !== 'todas') lista = lista.filter((p) => this.fuenteDe(p) === fuente);
+    if (bloque !== 'todos') lista = lista.filter((p) => this.bloqueDe(p) === bloque);
+    if (examen !== 'todos') lista = lista.filter((p) => (p._banco || '') === examen);
+    return lista;
+  },
+
   listaConjunto(tipo) {
-    const disp = this.preguntasDisponibles();
-    if (tipo === 'sin-contestar') {
+    const disp = this.poolFiltrado();
+    if (tipo === 'sin-hacer' || tipo === 'sin-contestar') {
       return disp.filter((p) => {
         const s = this.porPregunta[this.clave(p)];
         return !s || ((s.ok || 0) + (s.mal || 0)) === 0;
@@ -768,32 +893,39 @@ const App = {
 
   setCfg(k, v) {
     this.cfg[k] = v;
-    DB.set('cfg', this.cfg);
+    this.dset('cfg', this.cfg);
     this.pintarConfig();
   },
 
   pintarConfig() {
-    if (!this.cfg) this.cfg = Object.assign({ n: 25, min: 0, conjunto: 'todas' }, DB.get('cfg', {}) || {});
+    if (!this.cfg) this.cfg = Object.assign({ n: 25, min: 0 }, this.dget('cfg', {}) || {});
+    this.cfg.fuente = this.cfg.fuente || 'todas';
+    this.cfg.bloque = this.cfg.bloque || 'todos';
+    this.cfg.tipo = this.cfg.tipo || 'todas';
+    this.cfg.examen = this.cfg.examen || 'todos';
+
     const est = !!this.ajustes.correccionInmediata;
-    const max = this.contarConjunto(this.cfg.conjunto) || 0;
+    const max = this.contarConjunto(this.cfg.tipo) || 0;
+
+    // Selector de examen concreto
+    const selEx = document.getElementById('cfg-examen');
+    if (selEx) {
+      const opts = ['<option value="todos">Todo el banco (todos los exámenes)</option>']
+        .concat((this.bancos || []).map((b) =>
+          '<option value="' + this.esc(b.id) + '">' + this.esc(b.titulo || b.id) + '</option>'));
+      selEx.innerHTML = opts.join('');
+      selEx.value = this.cfg.examen;
+    }
 
     const inp = document.getElementById('cfg-n');
     if (inp) {
       inp.max = Math.max(1, max);
       inp.value = Math.min(this.cfg.n || 1, Math.max(1, max));
-      inp.disabled = false;
     }
     const not = document.getElementById('cfg-n-nota');
     if (not) not.textContent = max
-      ? (this.cfg.conjunto === 'muy-falladas' ? 'Tienes ' + max + ' preguntas muy falladas.' : 'Hay ' + max + ' preguntas en ese conjunto.')
-      : 'No hay preguntas en ese conjunto con el filtro actual.';
-
-    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    set('cj-todas', this.contarConjunto('todas'));
-    set('cj-sin', this.contarConjunto('sin-contestar'));
-    set('cj-fall', this.contarConjunto('falladas'));
-    set('cj-muy', this.contarConjunto('muy-falladas'));
-    this.$$('#cfg-conjunto [data-conjunto]').forEach((b) => b.classList.toggle('on', b.dataset.conjunto === this.cfg.conjunto));
+      ? 'Hay ' + max + ' preguntas con estos filtros.'
+      : 'No hay preguntas con estos filtros.';
 
     const min = est ? 0 : (this.cfg.min || 0);
     const cont = document.getElementById('cfg-tiempos');
@@ -807,25 +939,33 @@ const App = {
       ? 'En modo estudio no hay tiempo: es obligatorio ir sin límite.'
       : 'Cuando se acabe el tiempo, el test se entrega solo.';
 
-    this.$$('#cfg-pen .chip-mini').forEach((b) => {
-      b.classList.toggle('on', Math.abs((parseFloat(b.dataset.cfgPen) || 0) - (this.ajustes.penal || 0)) < 0.001);
-    });
+    this.$$('#cfg-fuente [data-fuente]').forEach((b) => b.classList.toggle('on', b.dataset.fuente === this.cfg.fuente));
+    this.$$('#cfg-bloque [data-bloque]').forEach((b) => b.classList.toggle('on', b.dataset.bloque === this.cfg.bloque));
+    this.$$('#cfg-tipo [data-tipo]').forEach((b) => b.classList.toggle('on', b.dataset.tipo === this.cfg.tipo));
 
     const nEf = max ? Math.max(1, Math.min(this.cfg.n || max, max)) : 0;
     const res = document.getElementById('cfg-resumen');
     if (res) {
       res.innerHTML = nEf
         ? '<b>' + nEf + '</b> pregunta' + (nEf === 1 ? '' : 's') + ' · ' +
-          (est ? 'modo estudio, <strong>sin tiempo</strong>' : (min > 0 ? '<strong>' + min + ' min</strong>' : 'sin límite')) +
-          ' · ' + this.txtPenal() + ' · ' + this.txtConjunto()
-        : 'No hay preguntas disponibles con esa combinacion.';
+          (est ? 'estudio, <strong>sin tiempo</strong>' : (min > 0 ? '<strong>' + min + ' min</strong>' : 'sin límite')) +
+          ' · ' + this.txtFuente() + ' · ' + this.txtBloque() + ' · ' + this.txtTipo()
+        : 'No hay preguntas disponibles con esa combinación.';
     }
     const go = document.getElementById('cfg-empezar');
     if (go) go.disabled = !nEf;
   },
 
-  txtConjunto() {
-    return { todas: 'todas las preguntas', 'sin-contestar': 'sin contestar', 'falladas': 'falladas', 'muy-falladas': 'muy falladas (más de ' + UMBRAL_MUY_FALLADAS + ' fallos)' }[this.cfg.conjunto] || '';
+  txtFuente() {
+    return { todas: 'todas las fuentes', oficial: 'oficiales', preparador: 'Daniel Dorta' }[this.cfg.fuente] || '';
+  },
+
+  txtBloque() {
+    return { todos: 'todos los bloques', test: 'test', caso: 'caso práctico', informatica: 'informática' }[this.cfg.bloque] || '';
+  },
+
+  txtTipo() {
+    return { todas: 'todas', falladas: 'falladas', 'sin-hacer': 'no realizadas' }[this.cfg.tipo] || '';
   },
 
   empezarConfig() {
@@ -857,8 +997,8 @@ const App = {
     }
     s.contadas = s.contadas || {};
     s.contadas[i] = true;
-    DB.set('porPregunta', this.porPregunta);
-    DB.set('fallos', this.fallos);
+    this.dset('porPregunta', this.porPregunta);
+    this.dset('fallos', this.fallos);
   },
 
   abrirMenu() {
@@ -945,11 +1085,12 @@ const App = {
       this.exId = ex.id;
       if (!lista.length) { this.toast('Ese examen no tiene preguntas con respuesta oficial'); return; }
     } else if (modo === 'config') {
-      const base = this.listaConjunto(this.cfg.conjunto);
+      const base = this.listaConjunto(this.cfg.tipo);
       if (!base.length) {
-        this.toast(this.cfg.conjunto === 'muy-falladas'
-          ? 'Todavía no tienes preguntas muy falladas (más de ' + UMBRAL_MUY_FALLADAS + ' fallos)'
-          : (this.cfg.conjunto === 'falladas' ? 'No tienes fallos pendientes' : 'No hay preguntas en ese conjunto'));
+        this.toast(this.cfg.tipo === 'falladas'
+          ? 'No tienes fallos pendientes con esos filtros'
+          : (this.cfg.tipo === 'sin-hacer' ? 'No quedan preguntas sin hacer con esos filtros'
+            : 'No hay preguntas con esos filtros'));
         return;
       }
       const n = Math.max(1, Math.min(this.cfg.n || base.length, base.length));
@@ -1000,7 +1141,7 @@ const App = {
   },
 
   guardarSesion() {
-    if (this.sesion) DB.set('sesion', this.sesion);
+    if (this.sesion) this.dset('sesion', this.sesion);
   },
 
   arrancarCrono() {
@@ -1266,7 +1407,7 @@ const App = {
     if (!confirm('¿Salir sin guardar este test? No contará en tus estadísticas.')) return;
     clearInterval(this._timer);
     this.sesion = null;
-    DB.del('sesion');
+    this.ddel('sesion');
     this.mostrarTab('tab-inicio');
     this.pintarInicio();
   },
@@ -1319,9 +1460,9 @@ const App = {
     this.historial.push(res);
     if (this.historial.length > 300) this.historial = this.historial.slice(-300);
 
-    DB.set('historial', this.historial);
-    DB.set('porPregunta', this.porPregunta);
-    DB.set('fallos', this.fallos);
+    this.dset('historial', this.historial);
+    this.dset('porPregunta', this.porPregunta);
+    this.dset('fallos', this.fallos);
 
     // Recuento por examen oficial: veces hechos y mejor nota (para la lista de "Exámenes oficiales").
     if (s.examenId) {
@@ -1330,7 +1471,7 @@ const App = {
       h.mejor = Math.max(h.mejor || 0, res.nota);
       h.ultima = res.fecha;
       this.examenesHechos[s.examenId] = h;
-      DB.set('examenesHechos', this.examenesHechos);
+      this.dset('examenesHechos', this.examenesHechos);
     }
 
     // MemorIA: cuenta el repaso del dia y saca la pregunta si llega a 5 dias.
@@ -1341,7 +1482,7 @@ const App = {
       this.pintarMemoria();
     }
 
-    DB.del('sesion');
+    this.ddel('sesion');
 
     this._ultimosFallos = s.preguntas.filter((p, i) => s.respuestas[i] && s.respuestas[i] !== p.correcta);
     this._ultimaSesion = s;
@@ -1445,7 +1586,7 @@ const App = {
     const el = document.getElementById('lista-tests');
     if (!el) return;
 
-    const pausadas = (DB.get('pausadas', []) || []).map((s) => ({
+    const pausadas = (this.dget('pausadas', []) || []).map((s) => ({
       tipo: 'abierto',
       id: s._id,
       fecha: s._guardada || new Date(s.inicio || Date.now()).toISOString(),
@@ -1830,29 +1971,33 @@ const App = {
 
   guardarBancoPDF() {
     const titulo = (document.getElementById('pdf-titulo').value || '').trim() || 'Examen importado';
+    const fuente = (document.getElementById('pdf-fuente').value === 'oficial') ? 'oficial' : 'preparador';
+    const bloque = document.getElementById('pdf-bloque').value || 'test';
     const lista = (this._pdfPreguntas || []).filter((p) => p.incluir !== false && p.correcta);
     if (!lista.length) { this.toast('No hay preguntas con respuesta marcada'); return; }
     const banco = {
       id: 'pdf-' + Date.now(),
       titulo,
-      convocatoria: 'Material del preparador',
+      convocatoria: fuente === 'oficial' ? 'Examen oficial' : 'Material del preparador',
       examen: 'Importado desde PDF',
       fecha: new Date().toISOString().slice(0, 10),
-      fuente: 'preparador',
+      fuente,
+      bloque,
       preguntas: lista.map((p, i) => ({
         n: i + 1,
         enunciado: p.enunciado,
         opciones: p.opciones,
         correcta: p.correcta,
-        fuente: 'preparador',
+        fuente,
+        bloque,
         justificacion: '',
         base: ''
       }))
     };
-    const imp = DB.get('bancos', []) || [];
+    const imp = this.dget('bancos', []) || [];
     const idx = imp.findIndex((b) => b.id === banco.id);
     if (idx >= 0) imp[idx] = banco; else imp.push(banco);
-    DB.set('bancos', imp);
+    this.dset('bancos', imp);
 
     const base = Array.isArray(window.BANCOS) ? window.BANCOS : [];
     const vistos = new Set();
@@ -1893,11 +2038,11 @@ const App = {
   },
 
   cargarMemoria() {
-    if (!this.mem) this.mem = DB.get('memoria', {}) || {};
+    if (!this.mem) this.mem = this.dget('memoria', {}) || {};
     return this.mem;
   },
 
-  guardarMemoria() { DB.set('memoria', this.mem || {}); },
+  guardarMemoria() { this.dset('memoria', this.mem || {}); },
 
   enMemoria(clave) { return !!(this.cargarMemoria()[clave]); },
 
@@ -2076,6 +2221,16 @@ const App = {
     }).join('');
   },
 
+  empezarFalladasInicio() {
+    const base = this.fallosDeBanco();
+    if (!base.length) { this.toast('No tienes fallos pendientes'); return; }
+    const inp = document.getElementById('inicio-n-falladas');
+    const pedidas = Math.max(1, parseInt(inp ? inp.value : 25, 10) || 25);
+    const n = Math.min(pedidas, base.length);
+    const lista = (this.ajustes.barajar ? this.barajar(base) : base.slice()).slice(0, n);
+    this.iniciarConLista(lista, 'Repaso de falladas');
+  },
+
   empezarMemoria() {
     const pend = this.pendientesHoy();
     if (!pend.length) { this.toast('No hay preguntas para repasar hoy'); return; }
@@ -2129,8 +2284,8 @@ const App = {
       historial: this.historial,
       porPregunta: this.porPregunta,
       fallos: this.fallos,
-      memoria: DB.get('memoria', {}) || {},
-      bancos: DB.get('bancos', []) || []
+      memoria: this.dget('memoria', {}) || {},
+      bancos: this.dget('bancos', []) || []
     };
     const txt = JSON.stringify(datos, null, 2);
     try {
@@ -2159,14 +2314,14 @@ const App = {
 
         if (Array.isArray(d)) {
           // importación de un BANCO de preguntas
-          const imp = DB.get('bancos', []) || [];
+          const imp = this.dget('bancos', []) || [];
           d.forEach((b) => {
             if (b && b.id && Array.isArray(b.preguntas)) {
               const i = imp.findIndex((x) => x.id === b.id);
               if (i >= 0) imp[i] = b; else imp.push(b);
             }
           });
-          DB.set('bancos', imp);
+          this.dset('bancos', imp);
           const base = Array.isArray(window.BANCOS) ? window.BANCOS : [];
           const vistos = new Set();
           this.bancos = base.concat(imp).filter((b) => {
@@ -2183,14 +2338,14 @@ const App = {
         if (d.historial) this.historial = d.historial;
         if (d.porPregunta) this.porPregunta = d.porPregunta;
         if (d.fallos) this.fallos = d.fallos;
-        if (d.memoria) { DB.set('memoria', d.memoria); this.mem = d.memoria; }
+        if (d.memoria) { this.dset('memoria', d.memoria); this.mem = d.memoria; }
         if (d.ajustes) this.ajustes = Object.assign({}, AJUSTES_DEF, d.ajustes);
-        if (Array.isArray(d.bancos)) DB.set('bancos', d.bancos);
+        if (Array.isArray(d.bancos)) this.dset('bancos', d.bancos);
 
-        DB.set('historial', this.historial);
-        DB.set('porPregunta', this.porPregunta);
-        DB.set('fallos', this.fallos);
-        DB.set('ajustes', this.ajustes);
+        this.dset('historial', this.historial);
+        this.dset('porPregunta', this.porPregunta);
+        this.dset('fallos', this.fallos);
+        this.dset('ajustes', this.ajustes);
 
         this.leerAjustesUI();
         this.pintarInicio();
@@ -2207,16 +2362,16 @@ const App = {
 
   reset() {
     if (!confirm('¿Borrar TODO el progreso (tests, estadísticas y fallos)? Esta acción no se puede deshacer.')) return;
-    const bancosImp = DB.get('bancos', []) || [];
-    DB.borrarTodo();
-    if (bancosImp.length) DB.set('bancos', bancosImp);
+    const bancosImp = this.dget('bancos', []) || [];
+    this.dborrarTodo();
+    if (bancosImp.length) this.dset('bancos', bancosImp);
     this.historial = [];
     this.porPregunta = {};
     this.fallos = [];
     this.examenesHechos = {};
     this.sesion = null;
     this.mem = {};
-    DB.del('memoria');
+    this.ddel('memoria');
     this.cfg = { n: 25, min: 0, conjunto: 'todas' };
     clearInterval(this._timer);
     this.pintarInicio();
