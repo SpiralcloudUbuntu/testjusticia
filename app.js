@@ -34,6 +34,9 @@ const App = {
   /* ================= arranque ================= */
 
   init() {
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+    }
     this.ajustes = Object.assign({}, AJUSTES_DEF, DB.get('ajustes', {}) || {});
     this.filtroFuente = DB.get('filtroFuente', 'todas') || 'todas';
     this.historial = DB.get('historial', []) || [];
@@ -124,6 +127,11 @@ const App = {
     document.getElementById('btn-exportar').addEventListener('click', () => this.exportar());
     document.getElementById('btn-importar').addEventListener('click', () => document.getElementById('file-import').click());
     document.getElementById('file-import').addEventListener('change', (e) => this.importar(e));
+    document.getElementById('btn-importar-pdf').addEventListener('click', () => this.abrirImportPDF());
+    document.getElementById('file-pdf').addEventListener('change', (e) => this.importarPDF(e));
+    document.getElementById('btn-guardar-pdf').addEventListener('click', () => this.guardarBancoPDF());
+    document.getElementById('btn-cerrar-pdf').addEventListener('click', () => this.cerrarModalPDF());
+    document.getElementById('btn-cancelar-pdf').addEventListener('click', () => this.cerrarModalPDF());
     document.getElementById('btn-reset').addEventListener('click', () => this.reset());
 
     ['testN', 'simN', 'simMin', 'penal', 'correccionInmediata', 'barajar', 'oscuro'].forEach((k) => {
@@ -1376,6 +1384,229 @@ const App = {
       (nombres[r.modo] || r.modo || 'Test') + ' · ' + r.ok + '/' + r.total + '</span>' +
       '<span class="hist-pct ' + ((r.pct || 0) >= 50 ? 'ok' : 'mal') + '">' + (r.pct || 0) + '%</span></div>'
     ).join('');
+  },
+
+  /* ================= importar PDF ================= */
+
+  abrirImportPDF() {
+    document.getElementById('modal-ajustes').classList.add('hidden');
+    document.getElementById('file-pdf').click();
+  },
+
+  async leerPDF(file) {
+    if (typeof pdfjsLib === 'undefined') throw new Error('pdf.js no está cargado');
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let texto = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const cont = await page.getTextContent();
+      let ultimaY = null;
+      cont.items.forEach((it) => {
+        const y = it.transform ? it.transform[5] : null;
+        if (ultimaY !== null && y !== null && Math.abs(y - ultimaY) > 4) texto += '\n';
+        texto += it.str;
+        if (it.hasEOL) texto += '\n';
+        if (y !== null) ultimaY = y;
+      });
+      texto += '\n';
+    }
+    return texto;
+  },
+
+  /* Parser heuristico: busca "1." / "1)" / "Pregunta 1", opciones a) b) c) d)
+     y una marca de respuesta correcta. Si no la encuentra, se elige a mano. */
+  parsearPreguntas(texto) {
+    const t = String(texto || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ');
+    const rePreg = /(?:^|\n)\s*(?:pregunta\s+)?(\d{1,3})\s*[\.\)\-–—]\s+/gi;
+    const marcas = [];
+    let m;
+    while ((m = rePreg.exec(t)) !== null) {
+      marcas.push({ num: m[1], ini: rePreg.lastIndex, pos: m.index });
+    }
+    if (!marcas.length) return [];
+
+    const out = [];
+    marcas.forEach((mk, k) => {
+      const fin = (k + 1 < marcas.length) ? marcas[k + 1].pos : t.length;
+      let bloque = t.slice(mk.ini, fin).trim();
+      if (!bloque) return;
+
+      // Respuesta correcta explicita. Primero "Respuesta/Solucion"; si no hay,
+      // una marca "correcta: X". Sin la bandera i, "Respuesta" no casaba.
+      let correcta = '';
+      let mr = bloque.match(/(?:respuesta|soluci[oó]n)\s*(?:correcta)?\s*[:\-–—]?\s*([a-dA-D])\b/i);
+      if (!mr) mr = bloque.match(/\bcorrecta\s*[:\-–—]\s*([a-dA-D])\b/i);
+      if (mr) {
+        correcta = mr[1].toLowerCase();
+        bloque = bloque.slice(0, mr.index).trim();
+      }
+
+      // Opciones
+      const reOp = /(?:^|\n)\s*([a-dA-D])\s*[\)\.\-–—]\s+/g;
+      const pos = [];
+      let mo;
+      while ((mo = reOp.exec('\n' + bloque)) !== null) {
+        pos.push({ letra: mo[1].toLowerCase(), ini: mo.index, fin: reOp.lastIndex });
+      }
+      if (pos.length < 2) return;
+
+      const enunciado = ('\n' + bloque).slice(0, pos[0].ini).trim();
+      if (enunciado.length < 10) return;
+
+      const opciones = { a: '', b: '', c: '', d: '' };
+      pos.forEach((p, i) => {
+        const finOp = (i + 1 < pos.length) ? pos[i + 1].ini : ('\n' + bloque).length;
+        const val = ('\n' + bloque).slice(p.fin, finOp).trim();
+        if (['a', 'b', 'c', 'd'].includes(p.letra)) opciones[p.letra] = val;
+      });
+
+      const rellenas = ['a', 'b', 'c', 'd'].filter((l) => opciones[l]);
+      if (rellenas.length < 2) return;
+
+      out.push({
+        n: out.length + 1,
+        enunciado,
+        opciones,
+        correcta: (correcta && opciones[correcta]) ? correcta : '',
+        fuente: 'preparador'
+      });
+    });
+    return out;
+  },
+
+  async importarPDF(event) {
+    const f = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!f) return;
+    this.toast('Leyendo el PDF…');
+    try {
+      const texto = await this.leerPDF(f);
+      if (!String(texto).trim()) {
+        this.toast('Ese PDF no tiene texto: parece un escaneo. Necesita OCR.');
+        return;
+      }
+      const preguntas = this.parsearPreguntas(texto);
+      if (!preguntas.length) {
+        this.toast('No he reconocido preguntas en ese PDF.');
+        return;
+      }
+      this._pdfPreguntas = preguntas;
+      this._pdfTitulo = f.name.replace(/\.pdf$/i, '');
+      this.mostrarRevisionPDF();
+    } catch (e) {
+      console.error('importarPDF', e);
+      this.toast('No se pudo leer el PDF: ' + (e.message || e));
+    }
+  },
+
+  mostrarRevisionPDF() {
+    const preguntas = this._pdfPreguntas || [];
+    const modal = document.getElementById('modal-pdf');
+    document.getElementById('pdf-titulo').value = this._pdfTitulo || '';
+    const conResp = preguntas.filter((p) => p.correcta).length;
+    document.getElementById('pdf-resumen').innerHTML =
+      'Detectadas <strong>' + preguntas.length + '</strong> preguntas · ' +
+      '<strong>' + conResp + '</strong> con respuesta correcta reconocida.' +
+      (conResp < preguntas.length
+        ? '<br><span style="color:#b45309">Marca la correcta en las que falten o no se guardarán.</span>'
+        : '');
+
+    const el = document.getElementById('pdf-lista');
+    el.innerHTML = preguntas.map((p, i) => {
+      const ops = ['a', 'b', 'c', 'd'].filter((l) => p.opciones[l]).map((l) =>
+        '<div>' + l.toUpperCase() + ') ' +
+        (p.correcta === l ? '<b class="ok">' + this.esc(p.opciones[l]) + '</b>' : this.esc(p.opciones[l])) +
+        '</div>').join('');
+      const sel = '<select class="pdf-item-sel" data-pdf-resp="' + i + '">' +
+        '<option value="">— correcta —</option>' +
+        ['a', 'b', 'c', 'd'].filter((l) => p.opciones[l]).map((l) =>
+          '<option value="' + l + '"' + (p.correcta === l ? ' selected' : '') + '>' + l.toUpperCase() + '</option>').join('') +
+        '</select>';
+      return '<div class="pdf-item' + (p.incluir === false ? ' off' : '') + '">' +
+        '<div class="pdf-item-cab">' +
+          '<label style="display:flex;align-items:center;gap:6px">' +
+            '<input type="checkbox" data-pdf-inc="' + i + '"' + (p.incluir === false ? '' : ' checked') + '> Pregunta ' + (i + 1) +
+          '</label>' + sel +
+        '</div>' +
+        '<div class="pdf-item-enun">' + this.esc(p.enunciado) + '</div>' +
+        '<div class="pdf-item-ops">' + ops + '</div>' +
+      '</div>';
+    }).join('');
+
+    el.querySelectorAll('[data-pdf-inc]').forEach((c) => {
+      c.addEventListener('change', () => {
+        const i = parseInt(c.dataset.pdfInc, 10);
+        this._pdfPreguntas[i].incluir = c.checked;
+        c.closest('.pdf-item').classList.toggle('off', !c.checked);
+        this.actualizarBotonPDF();
+      });
+    });
+    el.querySelectorAll('[data-pdf-resp]').forEach((s) => {
+      s.addEventListener('change', () => {
+        const i = parseInt(s.dataset.pdfResp, 10);
+        this._pdfPreguntas[i].correcta = s.value;
+        this.mostrarRevisionPDF();
+      });
+    });
+
+    modal.classList.remove('hidden');
+    this.actualizarBotonPDF();
+  },
+
+  actualizarBotonPDF() {
+    const lista = (this._pdfPreguntas || []).filter((p) => p.incluir !== false && p.correcta);
+    const btn = document.getElementById('btn-guardar-pdf');
+    btn.disabled = lista.length === 0;
+    btn.textContent = 'Guardar ' + lista.length + ' preguntas';
+  },
+
+  guardarBancoPDF() {
+    const titulo = (document.getElementById('pdf-titulo').value || '').trim() || 'Examen importado';
+    const lista = (this._pdfPreguntas || []).filter((p) => p.incluir !== false && p.correcta);
+    if (!lista.length) { this.toast('No hay preguntas con respuesta marcada'); return; }
+    const banco = {
+      id: 'pdf-' + Date.now(),
+      titulo,
+      convocatoria: 'Material del preparador',
+      examen: 'Importado desde PDF',
+      fecha: new Date().toISOString().slice(0, 10),
+      fuente: 'preparador',
+      preguntas: lista.map((p, i) => ({
+        n: i + 1,
+        enunciado: p.enunciado,
+        opciones: p.opciones,
+        correcta: p.correcta,
+        fuente: 'preparador',
+        justificacion: '',
+        base: ''
+      }))
+    };
+    const imp = DB.get('bancos', []) || [];
+    const idx = imp.findIndex((b) => b.id === banco.id);
+    if (idx >= 0) imp[idx] = banco; else imp.push(banco);
+    DB.set('bancos', imp);
+
+    const base = Array.isArray(window.BANCOS) ? window.BANCOS : [];
+    const vistos = new Set();
+    this.bancos = base.concat(imp).filter((b) => {
+      if (!b || !b.id || !Array.isArray(b.preguntas)) return false;
+      if (vistos.has(b.id)) return false;
+      vistos.add(b.id); return true;
+    });
+    this.banco = this.banco || banco;
+
+    document.getElementById('modal-pdf').classList.add('hidden');
+    this._pdfPreguntas = null;
+    this.pintarInicio();
+    this.pintarStats();
+    this.pintarChipsFuente();
+    this.toast('Añadido "' + titulo + '": ' + lista.length + ' preguntas');
+  },
+
+  cerrarModalPDF() {
+    document.getElementById('modal-pdf').classList.add('hidden');
+    this._pdfPreguntas = null;
   },
 
   /* ================= export / import / reset ================= */

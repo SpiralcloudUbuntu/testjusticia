@@ -544,15 +544,40 @@
       <div class="modal-acciones">
         <button id="btn-exportar" class="btn-sec" type="button">Exportar progreso</button>
         <button id="btn-importar" class="btn-sec" type="button">Importar banco o progreso (.json)</button>
+        <button id="btn-importar-pdf" class="btn-pri" type="button">Importar examen en PDF</button>
         <button id="btn-reset" class="btn-peligro" type="button">Borrar todo el progreso</button>
       </div>
       <input type="file" id="file-import" accept="application/json" class="hidden">
+      <input type="file" id="file-pdf" accept="application/pdf,.pdf" class="hidden">
     </div>
   </div>
 </div>
 
 <div id="toast" class="toast hidden"></div>
 
+<!-- ================= MODAL: IMPORTAR PDF ================= -->
+<div id="modal-pdf" class="modal hidden">
+  <div class="modal-caja">
+    <div class="modal-cab">
+      <span>Importar examen en PDF</span>
+      <button id="btn-cerrar-pdf" class="icon-btn" type="button">Cerrar</button>
+    </div>
+    <div class="modal-cuerpo">
+      <label class="campo">
+        <span>Nombre del examen</span>
+        <input type="text" id="pdf-titulo" placeholder="Ej. Simulacro Daniel Dorta 3">
+      </label>
+      <div id="pdf-resumen" class="card-meta"></div>
+      <div id="pdf-lista" class="pdf-lista"></div>
+      <div class="modal-acciones">
+        <button id="btn-guardar-pdf" class="btn-pri" type="button" disabled>Guardar preguntas</button>
+        <button id="btn-cancelar-pdf" class="btn-sec" type="button">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/pdf.min.js"></script>
 <script src="datos/examenes.js"></script>
 <script src="datos/banco.js"></script>
 <script src="db.js"></script>

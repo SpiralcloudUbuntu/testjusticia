@@ -8,6 +8,8 @@ const ASSETS = [
   './style.css',
   './db.js',
   './app.js',
+  './vendor/pdf.min.js',
+  './vendor/pdf.worker.min.js',
   './manifest.json',
   './datos/examenes.js',
   './datos/banco.js',

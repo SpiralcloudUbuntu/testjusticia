@@ -679,3 +679,14 @@ body.dark .racha.baja{color:#fca5a5;background:rgba(220,53,69,.14);border-color:
 /* =========================== FILTROS DE REVISION =========================== */
 .rev-filtros{margin-bottom:12px}
 .rev-vacio{padding:14px;text-align:center;color:var(--ink2);font-size:.9rem}
+
+/* =========================== IMPORTAR PDF =========================== */
+.pdf-lista{display:flex;flex-direction:column;gap:8px;max-height:44vh;overflow-y:auto;padding-right:2px}
+.pdf-item{border:1px solid var(--borde);border-radius:var(--radio-sm);padding:10px 12px;background:var(--bg)}
+.pdf-item.off{opacity:.42}
+.pdf-item-cab{display:flex;align-items:center;gap:8px;font-size:.72rem;font-weight:800;color:var(--ink2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.pdf-item-enun{font-size:.88rem;line-height:1.4;margin-bottom:6px}
+.pdf-item-ops{font-size:.8rem;color:var(--ink2);line-height:1.55}
+.pdf-item-ops b.ok{color:var(--ok-fuerte);font-weight:800}
+.pdf-item-sel{font:inherit;font-size:12px;padding:3px 7px;border-radius:6px;border:1px solid var(--borde);background:var(--card);color:var(--ink);margin-left:auto}
+body.dark .pdf-item{background:#1e2739}
