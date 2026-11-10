@@ -117,6 +117,12 @@
               <span class="qt-mode-desc">Número de preguntas, modo, tiempo, fuente, bloque y tipo de pregunta.</span>
               <span class="qt-mode-meta"><b>Elegir opciones</b></span>
             </button>
+
+            <button class="qt-mode" type="button" id="opt-completo">
+              <span class="qt-mode-top"><span class="qt-mode-ic">◎</span><span class="qt-mode-name">Examen completo</span></span>
+              <span class="qt-mode-desc">Un examen entero, tal y como cayó: oficiales o de Daniel Dorta.</span>
+              <span class="qt-mode-meta"><b>Ver exámenes</b></span>
+            </button>
           </div>
         </div>
 
@@ -217,6 +223,70 @@
           <div class="cfg-final">
             <div class="cfg-resumen" id="cfg-resumen">—</div>
             <button class="btn-pri btn-grande" type="button" id="cfg-empezar">Comenzar test</button>
+          </div>
+        </div>
+
+        <!-- ---------- VISTA: EXAMEN COMPLETO ---------- -->
+        <div id="vista-completo" class="hidden">
+          <div class="vista-cab">
+            <button class="btn-sec btn-volver" type="button" id="comp-volver">‹ Volver</button>
+            <div class="vista-cab-tx"><b>Examen completo</b><span>tal y como cayó</span></div>
+          </div>
+
+          <div class="fchips" id="comp-fuente">
+            <button class="fchip on" type="button" data-comp-fuente="oficial">Oficiales</button>
+            <button class="fchip fchip-pre" type="button" data-comp-fuente="preparador">Daniel Dorta</button>
+          </div>
+
+          <div id="comp-lista" class="of-lista"></div>
+        </div>
+
+        <!-- ---------- VISTA: CONFIGURAR UN EXAMEN COMPLETO ---------- -->
+        <div id="vista-examen" class="hidden">
+          <div class="vista-cab">
+            <button class="btn-sec btn-volver" type="button" id="ex-volver">‹ Volver a la lista</button>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Examen completo</div>
+            <div class="card-titulo" id="ex-titulo">—</div>
+            <div class="card-meta" id="ex-meta"></div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">1</div>
+            <div class="paso-cuerpo">
+              <h3>Cómo quieres hacerlo</h3>
+              <div class="seg" id="ex-modo">
+                <button class="seg-btn" type="button" data-correccion="examen">
+                  <b>Modo examen</b><span>Sin ayudas y con tiempo, como el día del examen.</span>
+                </button>
+                <button class="seg-btn" type="button" data-correccion="estudio">
+                  <b>Modo estudio</b><span>Corrige al momento, con la base legal. Sin tiempo.</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="paso">
+            <div class="paso-num">2</div>
+            <div class="paso-cuerpo">
+              <h3>Tiempo</h3>
+              <div class="chips-mini" id="ex-tiempos">
+                <button class="chip-mini" type="button" data-ex-min="0">Sin límite</button>
+                <button class="chip-mini" type="button" data-ex-min="30">30 min</button>
+                <button class="chip-mini" type="button" data-ex-min="45">45 min</button>
+                <button class="chip-mini" type="button" data-ex-min="60">60 min</button>
+                <button class="chip-mini" type="button" data-ex-min="90">90 min</button>
+                <button class="chip-mini" type="button" data-ex-min="120">120 min</button>
+              </div>
+              <div class="cfg-nota" id="ex-tiempo-nota">Cuando se acabe el tiempo, el examen se entrega solo.</div>
+            </div>
+          </div>
+
+          <div class="cfg-final">
+            <div class="cfg-resumen" id="ex-resumen">—</div>
+            <button class="btn-pri btn-grande" type="button" id="ex-empezar">Comenzar el examen</button>
           </div>
         </div>
 
@@ -444,6 +514,22 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+
+<!-- ================= MODAL: CONFIRMACION PROPIA ================= -->
+<div id="modal-confirmar" class="modal hidden">
+  <div class="modal-caja">
+    <div class="modal-cab">
+      <span id="conf-titulo">Confirmar</span>
+    </div>
+    <div class="modal-cuerpo">
+      <div id="conf-texto" class="card-meta"></div>
+      <div class="modal-acciones">
+        <button id="conf-ok" class="btn-pri" type="button">Aceptar</button>
+        <button id="conf-cancel" class="btn-sec" type="button">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ================= MODAL: IMPORTAR PDF ================= -->
 <div id="modal-pdf" class="modal hidden">

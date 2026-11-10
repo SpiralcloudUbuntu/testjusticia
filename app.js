@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -121,12 +121,20 @@ const App = {
   cambiarCuenta(c) {
     if (!c || c === this.cuenta) return;
     if (this.sesion) {
-      if (!confirm('Tienes un test en curso. Al cambiar de cuenta se guardará como "a medias". ¿Continuar?')) {
-        document.getElementById('set-cuenta').value = this.cuenta;
-        return;
-      }
-      this.pausarSesion();
+      this.confirmar(
+        'Tienes un test en curso. Al cambiar de cuenta se guardará como "a medias".',
+        'Cambiar de cuenta',
+        () => { this.pausarSesion(); this._cambiarCuenta(c); },
+        () => { const s = document.getElementById('set-cuenta'); if (s) s.value = this.cuenta; },
+        'Cambiar',
+        'Cancelar'
+      );
+      return;
     }
+    this._cambiarCuenta(c);
+  },
+
+  _cambiarCuenta(c) {
     this.cuenta = c;
     DB.set('cuenta', c);
     this.cargarEstado();
@@ -218,16 +226,18 @@ const App = {
     });
 
     /* --- portada del test: las dos opciones --- */
-    const oOf = document.getElementById('opt-oficiales');
-    if (oOf) oOf.addEventListener('click', () => this.vistaTest('oficiales'));
     const oCf = document.getElementById('opt-config');
     if (oCf) oCf.addEventListener('click', () => this.vistaTest('config'));
-    const ofV = document.getElementById('of-volver');
-    if (ofV) ofV.addEventListener('click', () => this.vistaTest('portada'));
+    const oCo = document.getElementById('opt-completo');
+    if (oCo) oCo.addEventListener('click', () => this.vistaTest('completo'));
+    const coV = document.getElementById('comp-volver');
+    if (coV) coV.addEventListener('click', () => this.vistaTest('portada'));
     const exV = document.getElementById('ex-volver');
-    if (exV) exV.addEventListener('click', () => this.vistaTest('oficiales'));
+    if (exV) exV.addEventListener('click', () => this.vistaTest('completo'));
     const cfV = document.getElementById('cfg-volver');
     if (cfV) cfV.addEventListener('click', () => this.vistaTest('portada'));
+    this.$$('#comp-fuente [data-comp-fuente]').forEach((b) =>
+      b.addEventListener('click', () => { this._compFuente = b.dataset.compFuente; this.pintarCompletos(); }));
 
     this.$$('[data-of-filtro]').forEach((b) => {
       b.addEventListener('click', () => this.setFiltroOficiales(b.dataset.ofFiltro));
@@ -371,11 +381,58 @@ const App = {
 
   /* ================= navegación ================= */
 
+  /* ---------- diálogo de confirmación propio ----------
+     No se usa window.confirm(): en PWA instalada, o tras varios diálogos
+     seguidos, el navegador lo bloquea y devuelve false siempre. Eso dejaba
+     al usuario encerrado en un test sin poder salir ni cambiar de pestaña. */
+  confirmar(texto, titulo, onOk, onCancel, okTexto, cancelTexto) {
+    const m = document.getElementById('modal-confirmar');
+    if (!m) { if (onOk) onOk(); return; }
+    document.getElementById('conf-titulo').textContent = titulo || 'Confirmar';
+    document.getElementById('conf-texto').textContent = texto || '';
+    const bOk = document.getElementById('conf-ok');
+    const bNo = document.getElementById('conf-cancel');
+    bOk.textContent = okTexto || 'Aceptar';
+    bNo.textContent = cancelTexto || 'Cancelar';
+
+    const cerrar = () => {
+      m.classList.add('hidden');
+      bOk.onclick = null;
+      bNo.onclick = null;
+    };
+    bOk.onclick = () => { cerrar(); if (onOk) onOk(); };
+    bNo.onclick = () => { cerrar(); if (onCancel) onCancel(); };
+    m.classList.remove('hidden');
+    bOk.focus();
+  },
+
   mostrarTab(id) {
     // Si hay un test en curso y se va a otra pestaña, preguntar antes.
     if (this.sesion && id !== 'tab-test') {
-      if (!this.confirmarSalidaTest()) return;
+      this.confirmarSalidaTest(id);
+      return;
     }
+    this._mostrarTab(id);
+  },
+
+  /* Pregunta al salir de un test en curso y navega si acepta. */
+  confirmarSalidaTest(destino) {
+    const s = this.sesion;
+    if (!s) { this._mostrarTab(destino); return; }
+    const hechas = Object.keys(s.respuestas || {}).length;
+    const total = (s.preguntas || []).length;
+    this.confirmar(
+      'Tienes un test a medias (' + hechas + '/' + total + ' respondidas). ' +
+      'Puedes guardarlo para continuar cuando quieras.',
+      'Salir del test',
+      () => { this.pausarSesion(); this._mostrarTab(destino); },
+      null,
+      'Guardar y salir',
+      'Seguir en el test'
+    );
+  },
+
+  _mostrarTab(id) {
     this.$$('.tab-content').forEach((s) => s.classList.add('hidden'));
     const sec = document.getElementById(id);
     if (sec) sec.classList.remove('hidden');
@@ -396,22 +453,6 @@ const App = {
       }
     }
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
-  },
-
-  /* Pregunta al salir de un test en curso. true = seguir con la navegacion. */
-  confirmarSalidaTest() {
-    const s = this.sesion;
-    if (!s) return true;
-    const hechas = Object.keys(s.respuestas || {}).length;
-    const total = (s.preguntas || []).length;
-    const ok = confirm(
-      'Tienes un test a medias (' + hechas + '/' + total + ' respondidas).\n\n' +
-      'Aceptar: guardarlo para continuar cuando quieras.\n' +
-      'Cancelar: seguir en el test.'
-    );
-    if (!ok) return false;
-    this.pausarSesion();
-    return true;
   },
 
   /* Guarda la sesion en curso en la lista de "a medias". */
@@ -448,11 +489,15 @@ const App = {
   },
 
   descartarPausada(id) {
-    if (!confirm('¿Descartar ese test a medias? No contará en tus estadísticas.')) return;
-    const lista = (this.dget('pausadas', []) || []).filter((x) => x._id !== id);
-    this.dset('pausadas', lista);
-    this.pintarListaTests();
-    this.toast('Test descartado');
+    this.confirmar('¿Descartar ese test a medias? No contará en tus estadísticas.', 'Descartar test',
+      () => {
+        const lista = (this.dget('pausadas', []) || []).filter((x) => x._id !== id);
+        this.dset('pausadas', lista);
+        this.pintarListaTests();
+        this.pintarInicio();
+        this.toast('Test descartado');
+      },
+      null, 'Descartar', 'Cancelar');
   },
 
   /* ================= inicio ================= */
@@ -689,7 +734,7 @@ const App = {
   /* ================= portada del test (dos opciones) ================= */
 
   vistaTest(v) {
-    const map = { portada: 'test-portada', oficiales: 'vista-oficiales', examen: 'vista-examen', config: 'vista-config', runner: 'test-runner' };
+    const map = { portada: 'test-portada', config: 'vista-config', completo: 'vista-completo', examen: 'vista-examen', runner: 'test-runner' };
     if (!map[v]) v = 'portada';
     Object.keys(map).forEach((k) => {
       const el = document.getElementById(map[k]);
@@ -697,9 +742,54 @@ const App = {
     });
     this._vistaTest = v;
     if (v === 'portada') this.pintarPortadaTest();
-    else if (v === 'oficiales') this.pintarOficiales();
+    else if (v === 'completo') this.pintarCompletos();
     else if (v === 'examen') this.pintarExamenCfg();
     else if (v === 'config') this.pintarConfig();
+  },
+
+  /* Exámenes completos, separados de los configurables. */
+  pintarCompletos() {
+    const el = document.getElementById('comp-lista');
+    if (!el) return;
+    const fuente = this._compFuente || 'oficial';
+    this.$$('#comp-fuente [data-comp-fuente]').forEach((b) =>
+      b.classList.toggle('on', b.dataset.compFuente === fuente));
+
+    const exs = this.examenes().filter((x) => {
+      const b = (this.bancos || []).find((bb) => bb.id === x.banco);
+      const f = (b && b.fuente) ? b.fuente : 'oficial';
+      return f === fuente;
+    });
+
+    if (!exs.length) {
+      el.innerHTML = '<div class="mem-vacio">No hay exámenes de esa fuente todavía.' +
+        (fuente === 'preparador' ? '<br>Importa un PDF desde Ajustes para añadir los de Daniel Dorta.' : '') +
+        '</div>';
+      return;
+    }
+
+    el.innerHTML = exs.map((x) => {
+      const h = this.hechoDe(x.id);
+      return '<button class="of-item" type="button" data-completo="' + this.esc(x.id) + '">' +
+        '<span class="of-item-tx">' +
+          '<span class="of-item-t">' + this.esc(x.titulo) + '</span>' +
+          '<span class="of-item-s">' + this.esc(x.convocatoria || '') + '</span>' +
+          '<span class="of-item-m">' + x.n + ' preguntas' + (x.etiqueta ? ' · ' + this.esc(x.etiqueta) : '') + '</span>' +
+        '</span>' +
+        (h ? '<span class="of-item-est hecho">Hecho x' + h.veces + ' · mejor ' + Number(h.mejor || 0).toFixed(2) + '</span>'
+           : '<span class="of-item-est">Sin hacer</span>') +
+        '</button>';
+    }).join('');
+
+    el.querySelectorAll('[data-completo]').forEach((b) =>
+      b.addEventListener('click', () => this.abrirCompleto(b.dataset.completo)));
+  },
+
+  abrirCompleto(id) {
+    const ex = this.examenes().find((x) => x.id === id);
+    if (!ex) return;
+    this.exCfg = { id, min: 0 };
+    this.vistaTest('examen');
   },
 
   pintarPortadaTest() {
@@ -1404,20 +1494,36 @@ const App = {
   anterior() { if (this.sesion) this.irA(this.sesion.idx - 1); },
 
   abandonar() {
-    if (!confirm('¿Salir sin guardar este test? No contará en tus estadísticas.')) return;
-    clearInterval(this._timer);
-    this.sesion = null;
-    this.ddel('sesion');
-    this.mostrarTab('tab-inicio');
-    this.pintarInicio();
+    this.confirmar(
+      '¿Salir sin guardar este test? No contará en tus estadísticas.',
+      'Salir sin guardar',
+      () => {
+        clearInterval(this._timer);
+        this.sesion = null;
+        this.ddel('sesion');
+        this._mostrarTab('tab-inicio');
+        this.pintarInicio();
+      },
+      null,
+      'Salir sin guardar',
+      'Seguir en el test'
+    );
   },
 
   finalizar(auto) {
     const s = this.sesion;
     if (!s) return;
     if (!auto && Object.keys(s.respuestas).length === 0) {
-      if (!confirm('No has respondido nada. ¿Finalizar igualmente?')) return;
+      this.confirmar('No has respondido nada. ¿Finalizar igualmente?', 'Finalizar test',
+        () => this._finalizar(auto), null, 'Finalizar', 'Seguir');
+      return;
     }
+    this._finalizar(auto);
+  },
+
+  _finalizar(auto) {
+    const s = this.sesion;
+    if (!s) return;
     clearInterval(this._timer);
     s.fin = Date.now();
     s.tiempo = Math.round((s.fin - s.inicio) / 1000);
@@ -2361,7 +2467,15 @@ const App = {
   },
 
   reset() {
-    if (!confirm('¿Borrar TODO el progreso (tests, estadísticas y fallos)? Esta acción no se puede deshacer.')) return;
+    this.confirmar(
+      '¿Borrar TODO el progreso de esta cuenta (tests, estadísticas y fallos)? Esta acción no se puede deshacer.',
+      'Borrar progreso',
+      () => this._reset(),
+      null, 'Borrar todo', 'Cancelar'
+    );
+  },
+
+  _reset() {
     const bancosImp = this.dget('bancos', []) || [];
     this.dborrarTodo();
     if (bancosImp.length) this.dset('bancos', bancosImp);
