@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -15,7 +15,8 @@ const AJUSTES_DEF = {
   penal: 0,
   correccionInmediata: false,
   barajar: true,
-  oscuro: false
+  oscuro: false,
+  letra: 'normal'
 };
 
 const App = {
@@ -58,6 +59,8 @@ const App = {
     this.pintarMemoria();
     this.pintarListaTests();
     this.enganchar();
+    this.vigilarActualizaciones();
+    this.prepararInstalacion();
     this.vistaTest('portada');
 
     const guardada = this.dget('sesion', null);
@@ -218,6 +221,25 @@ const App = {
     document.getElementById('set-cuenta').addEventListener('change', (e) => this.cambiarCuenta(e.target.value));
     document.getElementById('inicio-empezar-falladas').addEventListener('click', () => this.empezarFalladasInicio());
     document.getElementById('inicio-empezar-memoria').addEventListener('click', () => this.empezarMemoria());
+    const sl = document.getElementById('set-letra');
+    if (sl) sl.addEventListener('change', () => this.guardarAjustesDesdeUI());
+    const bc = document.getElementById('btn-cuenta');
+    if (bc) bc.addEventListener('click', () => this.abrirAjustes());
+    const bu = document.getElementById('btn-banner-update');
+    if (bu) bu.addEventListener('click', () => this.actualizarApp());
+    const bi = document.getElementById('btn-install');
+    if (bi) bi.addEventListener('click', () => this.instalar());
+    const bic = document.getElementById('btn-install-cerrar');
+    if (bic) bic.addEventListener('click', () => this.cerrarBannerInstall());
+    document.addEventListener('keydown', (e) => this.atajosTeclado(e));
+    const busc = document.getElementById('buscador');
+    if (busc) {
+      let t = null;
+      busc.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => this.buscar(busc.value), 220);
+      });
+    }
     document.getElementById('btn-reset').addEventListener('click', () => this.reset());
 
     ['testN', 'simN', 'simMin', 'penal', 'correccionInmediata', 'barajar', 'oscuro'].forEach((k) => {
@@ -261,12 +283,30 @@ const App = {
     }));
 
     this.$$('#cfg-bloque [data-bloque]').forEach((b) => b.addEventListener('click', () => {
-      this.cfg.bloque = b.dataset.bloque;
+      const x = b.dataset.bloque;
+      const arr = Array.isArray(this.cfg.bloques) ? this.cfg.bloques.slice() : ['test', 'caso', 'informatica'];
+      const i = arr.indexOf(x);
+      if (i >= 0) {
+        if (arr.length === 1) { this.toast('Debe quedar al menos un bloque marcado'); return; }
+        arr.splice(i, 1);
+      } else {
+        arr.push(x);
+      }
+      this.cfg.bloques = arr;
       const max = this.contarConjunto(this.cfg.tipo) || 0;
       if (max) this.cfg.n = Math.max(1, Math.min(this.cfg.n || max, max));
       this.dset('cfg', this.cfg);
       this.pintarConfig();
     }));
+
+    const selLey = document.getElementById('cfg-ley');
+    if (selLey) selLey.addEventListener('change', () => {
+      this.cfg.ley = selLey.value;
+      const max = this.contarConjunto(this.cfg.tipo) || 0;
+      if (max) this.cfg.n = Math.max(1, Math.min(this.cfg.n || max, max));
+      this.dset('cfg', this.cfg);
+      this.pintarConfig();
+    });
 
     this.$$('#cfg-tipo [data-tipo]').forEach((b) => b.addEventListener('click', () => {
       const max = this.contarConjunto(b.dataset.tipo) || 0;
@@ -614,10 +654,25 @@ const App = {
     document.getElementById('set-correccion-inmediata').checked = !!this.ajustes.correccionInmediata;
     document.getElementById('set-barajar').checked = !!this.ajustes.barajar;
     document.getElementById('set-oscuro').checked = !!this.ajustes.oscuro;
+    const sl = document.getElementById('set-letra');
+    if (sl) sl.value = this.ajustes.letra || 'normal';
   },
 
   aplicarTema() {
     document.body.classList.toggle('dark', !!this.ajustes.oscuro);
+    this.aplicarLetra();
+    this.pintarCuenta();
+  },
+
+  aplicarLetra() {
+    const l = this.ajustes.letra || 'normal';
+    document.body.classList.toggle('fuente-grande', l === 'grande');
+    document.body.classList.toggle('fuente-muygrande', l === 'muygrande');
+  },
+
+  pintarCuenta() {
+    const b = document.getElementById('btn-cuenta');
+    if (b) b.textContent = this.nombreCuenta();
   },
 
   guardarAjustesDesdeUI() {
@@ -628,7 +683,8 @@ const App = {
       penal: Math.max(0, Math.min(1, parseFloat(document.getElementById('set-penal').value) || 0)),
       correccionInmediata: document.getElementById('set-correccion-inmediata').checked,
       barajar: document.getElementById('set-barajar').checked,
-      oscuro: document.getElementById('set-oscuro').checked
+      oscuro: document.getElementById('set-oscuro').checked,
+      letra: (document.getElementById('set-letra') || {}).value || 'normal'
     };
     this.dset('ajustes', this.ajustes);
     this.aplicarTema();
@@ -929,28 +985,133 @@ const App = {
 
   /* ================= configurador de test ================= */
 
-  /* Bloque de una pregunta: campo explicito o deducido del titulo del examen.
-     En Tramitación: test (teórico), caso práctico y informática (Word/Excel). */
+  /* Rangos explicitos de bloque dentro de un examen:
+     "test (1-104), caso práctico (105-116) y Windows/Office (117-140)" */
+  extraerRangosBloque(txt) {
+    const t = String(txt || '').toLowerCase();
+    const out = [];
+    const defs = [
+      ['test', /(?:cuestionario[- ]?test|\btest\b)\s*\(?\s*(\d{1,3})\s*[-–a]\s*(\d{1,3})\s*\)?/],
+      ['caso', /caso\s*pr[aá]ctico\s*\(?\s*(\d{1,3})\s*[-–a]\s*(\d{1,3})\s*\)?/],
+      ['informatica', /(?:windows|office|word|inform[aá]tica)\s*\/?\s*[a-z]*\s*\(?\s*(\d{1,3})\s*[-–a]\s*(\d{1,3})\s*\)?/]
+    ];
+    defs.forEach((par) => {
+      const m = t.match(par[1]);
+      if (m) out.push({ bloque: par[0], desde: parseInt(m[1], 10), hasta: parseInt(m[2], 10) });
+    });
+    return out;
+  },
+
+  /* Bloque de una pregunta: campo explicito, rango del examen o inferencia.
+     En Tramitación: test (1er ejercicio), caso práctico (2º) e informática (3º). */
   bloqueDe(p) {
     if (p && p.bloque) return p.bloque;
-    const id = (p && p._banco) || '';
-    const b = (this.bancos || []).find((x) => x.id === id);
-    const t = ((b ? (b.titulo || '') + ' ' + (b.examen || '') : '')).toLowerCase();
-    if (/word|excel|inform[aá]tica|ofim[aá]tica|tercer ejercicio/.test(t)) return 'informatica';
-    if (/caso pr[aá]ctico|supuesto pr[aá]ctico|segundo ejercicio/.test(t)) return 'caso';
+    const b = (this.bancos || []).find((x) => x.id === (p && p._banco));
+    const txt = b ? ((b.examen || '') + ' ' + (b.titulo || '')) : '';
+    const t = txt.toLowerCase();
+
+    // 1) Rangos explicitos por numero de pregunta
+    this._rangosCache = this._rangosCache || {};
+    const clave = (p && p._banco) || '_';
+    if (!(clave in this._rangosCache)) this._rangosCache[clave] = this.extraerRangosBloque(txt);
+    const rangos = this._rangosCache[clave];
+    if (rangos && rangos.length && p && p.n) {
+      for (let i = 0; i < rangos.length; i++) {
+        if (p.n >= rangos[i].desde && p.n <= rangos[i].hasta) return rangos[i].bloque;
+      }
+    }
+
+    // 2) El examen declara un unico ejercicio
+    const tresEjercicios = /tres ejercicios/.test(t);
+    if (!tresEjercicios) {
+      if (/word|excel|inform[aá]tica|ofim[aá]tica|tercer ejercicio/.test(t)) return 'informatica';
+      if (/caso\s*pr[aá]ctico|supuesto\s*pr[aá]ctico|segundo ejercicio/.test(t)) return 'caso';
+      return 'test';
+    }
+
+    // 3) "Tres ejercicios" sin rangos: inferir por el enunciado
+    const e = String((p && p.enunciado) || '').toLowerCase();
+    if (/\bword\b|\bexcel\b|p[aá]rrafo|celda|hoja de c[aá]lculo|sangr[ií]a|margen|encabezado|pie de p[aá]gina|vi[nñ]eta|numeraci[oó]n|cuadro de di[aá]logo|pesta[nñ]a/.test(e)) return 'informatica';
+    if (/suponga|supuesto\s*pr[aá]ctico|se le requiere|comparece|debe resolver|se solicita/.test(e)) return 'caso';
     return 'test';
   },
 
-  /* Pool global filtrado por fuente, bloque y examen concreto. */
+  /* Normaliza las etiquetas de base legal (hay 272 distintas y muy sucias). */
+  normalizarLey(base) {
+    let b = String(base || '').toLowerCase().trim();
+    if (!b) return '';
+    // Si empieza por "art. X", quedarse con lo que viene detras
+    const art = b.match(/^art\.?\s*[\d.]+\s*(?:de\s+la\s+|de\s+)?(.+)$/);
+    if (art && art[1] && art[1].length > 3) b = art[1];
+
+    const reglas = [
+      [/enjuiciamiento civil|ley\s*1\s*\/\s*2000|\blec\b/, 'LEC (Ley 1/2000)'],
+      [/enjuiciamiento criminal|\blecrim\b/, 'LECrim'],
+      [/poder judicial|\blopj\b/, 'LOPJ (LO 6/1985)'],
+      [/constituci[oó]n/, 'Constitución Española'],
+      [/contencioso[- ]administrativo|ley\s*29\s*\/\s*1998|\bljca\b/, 'LJCA (Ley 29/1998)'],
+      [/jurisdicci[oó]n social|ley\s*36\s*\/\s*2011|\blrjs\b/, 'LRJS (Ley 36/2011)'],
+      [/registro civil|ley\s*20\s*\/\s*2011/, 'Ley del Registro Civil (20/2011)'],
+      [/protecci[oó]n de datos|lo\s*3\s*\/\s*2018|lo\s*15\s*\/\s*1999/, 'Protección de Datos'],
+      [/procedimiento administrativo com[uú]n|ley\s*39\s*\/\s*2015|\blpac\b/, 'LPAC (Ley 39/2015)'],
+      [/r[eé]gimen jur[ií]dico del sector p[uú]blico|ley\s*40\s*\/\s*2015|\blrjsp\b/, 'LRJSP (Ley 40/2015)'],
+      [/contratos del sector p[uú]blico|ley\s*9\s*\/\s*2017|\blcsp\b/, 'LCSP (Ley 9/2017)'],
+      [/estatuto de los trabajadores|rdleg\s*2\s*\/\s*2015/, 'Estatuto de los Trabajadores'],
+      [/estatuto b[aá]sico del empleado p[uú]blico|rdleg\s*5\s*\/\s*2015|\bebep\b/, 'EBEP (RDL 5/2015)'],
+      [/violencia de g[eé]nero|lo\s*1\s*\/\s*2004/, 'LO Violencia de Género'],
+      [/igualdad|lo\s*3\s*\/\s*2007/, 'LO Igualdad (3/2007)'],
+      [/extranjer[ií]a|lo\s*4\s*\/\s*2000/, 'LO Extranjería (4/2000)'],
+      [/c[oó]digo civil/, 'Código Civil'],
+      [/c[oó]digo penal/, 'Código Penal'],
+      [/c[oó]digo de comercio/, 'Código de Comercio'],
+      [/concursal|ley\s*22\s*\/\s*2003|trlc/, 'Ley Concursal'],
+      [/jurisdicci[oó]n voluntaria|ley\s*15\s*\/\s*2015/, 'Ley 15/2015 (Jurisdicción Voluntaria)'],
+      [/asistencia jur[ií]dica gratuita|ley\s*1\s*\/\s*1996/, 'Ley 1/1996 (Justicia Gratuita)'],
+      [/demarcaci[oó]n y planta|ley\s*38\s*\/\s*1988/, 'Ley 38/1988 (Demarcación y Planta)'],
+      [/tribunal constitucional|lo\s*2\s*\/\s*1979/, 'LOTC (LO 2/1979)'],
+      [/transparencia|ley\s*19\s*\/\s*2013/, 'Ley de Transparencia (19/2013)'],
+      [/contrato de trabajo|rdleg\s*2\s*\/\s*2015/, 'Estatuto de los Trabajadores']
+    ];
+    for (let i = 0; i < reglas.length; i++) {
+      if (reglas[i][0].test(b)) return reglas[i][1];
+    }
+
+    const m = b.match(/(?:ley org[aá]nica|lo|ley)\s*(\d+)\s*\/\s*(\d{4})/);
+    if (m) return 'Ley ' + m[1] + '/' + m[2];
+
+    return 'Otras';
+  },
+
+  leyDe(p) {
+    if (p && p.ley) return p.ley;
+    return this.normalizarLey(p && p.base);
+  },
+
+  leyesDisponibles() {
+    const cuenta = {};
+    this.poolGlobal().forEach((p) => {
+      const l = this.leyDe(p);
+      if (!l) return;
+      cuenta[l] = (cuenta[l] || 0) + 1;
+    });
+    return Object.keys(cuenta)
+      .map((ley) => ({ ley: ley, n: cuenta[ley] }))
+      .sort((a, b) => b.n - a.n);
+  },
+
+  /* Pool global filtrado por fuente, bloques, ley y examen concreto. */
   poolFiltrado() {
     const c = this.cfg || {};
     let lista = this.poolGlobal();
     const fuente = c.fuente || 'todas';
-    const bloque = c.bloque || 'todos';
+    const bloques = Array.isArray(c.bloques) ? c.bloques : ['test', 'caso', 'informatica'];
     const examen = c.examen || 'todos';
+    const ley = c.ley || 'todas';
+
     if (fuente !== 'todas') lista = lista.filter((p) => this.fuenteDe(p) === fuente);
-    if (bloque !== 'todos') lista = lista.filter((p) => this.bloqueDe(p) === bloque);
+    if (bloques.length < 3) lista = lista.filter((p) => bloques.indexOf(this.bloqueDe(p)) !== -1);
     if (examen !== 'todos') lista = lista.filter((p) => (p._banco || '') === examen);
+    if (ley !== 'todas') lista = lista.filter((p) => this.leyDe(p) === ley);
     return lista;
   },
 
@@ -990,9 +1151,12 @@ const App = {
   pintarConfig() {
     if (!this.cfg) this.cfg = Object.assign({ n: 25, min: 0 }, this.dget('cfg', {}) || {});
     this.cfg.fuente = this.cfg.fuente || 'todas';
-    this.cfg.bloque = this.cfg.bloque || 'todos';
+    if (!Array.isArray(this.cfg.bloques) || !this.cfg.bloques.length) {
+      this.cfg.bloques = ['test', 'caso', 'informatica'];
+    }
     this.cfg.tipo = this.cfg.tipo || 'todas';
     this.cfg.examen = this.cfg.examen || 'todos';
+    this.cfg.ley = this.cfg.ley || 'todas';
 
     const est = !!this.ajustes.correccionInmediata;
     const max = this.contarConjunto(this.cfg.tipo) || 0;
@@ -1030,8 +1194,24 @@ const App = {
       : 'Cuando se acabe el tiempo, el test se entrega solo.';
 
     this.$$('#cfg-fuente [data-fuente]').forEach((b) => b.classList.toggle('on', b.dataset.fuente === this.cfg.fuente));
-    this.$$('#cfg-bloque [data-bloque]').forEach((b) => b.classList.toggle('on', b.dataset.bloque === this.cfg.bloque));
+    this.$$('#cfg-bloque [data-bloque]').forEach((b) =>
+      b.classList.toggle('on', this.cfg.bloques.indexOf(b.dataset.bloque) !== -1));
     this.$$('#cfg-tipo [data-tipo]').forEach((b) => b.classList.toggle('on', b.dataset.tipo === this.cfg.tipo));
+
+    const bn = document.getElementById('cfg-bloque-nota');
+    if (bn) bn.textContent = this.cfg.bloques.length === 3
+      ? 'Marcados los tres: entran preguntas de cualquier bloque.'
+      : 'Entran solo: ' + this.txtBloque() + '.';
+
+    const selLey = document.getElementById('cfg-ley');
+    if (selLey) {
+      const leyes = this.leyesDisponibles();
+      const opts = ['<option value="todas">Todas las leyes</option>']
+        .concat(leyes.map((x) => '<option value="' + this.esc(x.ley) + '">' +
+          this.esc(x.ley) + ' (' + x.n + ')</option>'));
+      selLey.innerHTML = opts.join('');
+      selLey.value = this.cfg.ley;
+    }
 
     const nEf = max ? Math.max(1, Math.min(this.cfg.n || max, max)) : 0;
     const res = document.getElementById('cfg-resumen');
@@ -1039,7 +1219,8 @@ const App = {
       res.innerHTML = nEf
         ? '<b>' + nEf + '</b> pregunta' + (nEf === 1 ? '' : 's') + ' · ' +
           (est ? 'estudio, <strong>sin tiempo</strong>' : (min > 0 ? '<strong>' + min + ' min</strong>' : 'sin límite')) +
-          ' · ' + this.txtFuente() + ' · ' + this.txtBloque() + ' · ' + this.txtTipo()
+          ' · ' + this.txtFuente() + ' · ' + this.txtBloque() + ' · ' + this.txtTipo() +
+          (this.cfg.ley && this.cfg.ley !== 'todas' ? ' · ' + this.txtLey() : '')
         : 'No hay preguntas disponibles con esa combinación.';
     }
     const go = document.getElementById('cfg-empezar');
@@ -1051,7 +1232,14 @@ const App = {
   },
 
   txtBloque() {
-    return { todos: 'todos los bloques', test: 'test', caso: 'caso práctico', informatica: 'informática' }[this.cfg.bloque] || '';
+    const nombres = { test: 'test', caso: 'caso práctico', informatica: 'informática' };
+    const b = Array.isArray(this.cfg.bloques) ? this.cfg.bloques : [];
+    if (b.length === 3) return 'todos los bloques';
+    return b.map((x) => nombres[x] || x).join(' + ');
+  },
+
+  txtLey() {
+    return (this.cfg.ley && this.cfg.ley !== 'todas') ? this.cfg.ley : 'todas las leyes';
   },
 
   txtTipo() {
@@ -1087,6 +1275,7 @@ const App = {
     }
     s.contadas = s.contadas || {};
     s.contadas[i] = true;
+    this.registrarActividad(1);
     this.dset('porPregunta', this.porPregunta);
     this.dset('fallos', this.fallos);
   },
@@ -1513,12 +1702,24 @@ const App = {
   finalizar(auto) {
     const s = this.sesion;
     if (!s) return;
-    if (!auto && Object.keys(s.respuestas).length === 0) {
-      this.confirmar('No has respondido nada. ¿Finalizar igualmente?', 'Finalizar test',
-        () => this._finalizar(auto), null, 'Finalizar', 'Seguir');
+    if (auto) { this._finalizar(true); return; }
+
+    const blancas = s.preguntas.filter((p, i) =>
+      s.respuestas[i] === undefined || s.respuestas[i] === '').length;
+
+    if (blancas > 0) {
+      this.confirmar(
+        'Te quedan ' + blancas + ' pregunta' + (blancas === 1 ? '' : 's') +
+        ' sin responder. Puedes ir a la primera o entregar igualmente.',
+        'Quedan preguntas en blanco',
+        () => this._finalizar(false),
+        () => this._irAPrimeraBlanca(),
+        'Entregar igual',
+        'Ir a la primera'
+      );
       return;
     }
-    this._finalizar(auto);
+    this._finalizar(false);
   },
 
   _finalizar(auto) {
@@ -1819,11 +2020,113 @@ const App = {
     try {
       this.pintarStatsGlobal();
       this.pintarGrafico();
+      this.pintarStatsLeyes();
       this.pintarMasFalladas();
       this.pintarHistorial();
     } catch (e) {
       console.error('pintarStats', e);
     }
+  },
+
+  /* ---------- racha diaria ---------- */
+
+  registrarActividad(n) {
+    const hoy = this.hoyISO();
+    const act = this.dget('actividad', {}) || {};
+    act[hoy] = (act[hoy] || 0) + (n || 1);
+    this.dset('actividad', act);
+  },
+
+  rachaDias() {
+    const act = this.dget('actividad', {}) || {};
+    const d = new Date();
+    if (!act[this.hoyISO(d)]) d.setDate(d.getDate() - 1);
+    let racha = 0;
+    for (let i = 0; i < 3650; i++) {
+      if (!act[this.hoyISO(d)]) break;
+      racha++;
+      d.setDate(d.getDate() - 1);
+    }
+    return racha;
+  },
+
+  preguntasHoy() {
+    const act = this.dget('actividad', {}) || {};
+    return act[this.hoyISO()] || 0;
+  },
+
+  /* ---------- acierto por ley ---------- */
+
+  pintarStatsLeyes() {
+    const el = document.getElementById('stats-leyes');
+    if (!el) return;
+    const acc = {};
+    this.poolGlobal().forEach((p) => {
+      const st = this.porPregunta[this.clave(p)];
+      if (!st) return;
+      const t = (st.ok || 0) + (st.mal || 0);
+      if (!t) return;
+      const l = this.leyDe(p);
+      if (!l) return;
+      const a = acc[l] = acc[l] || { ok: 0, tot: 0 };
+      a.ok += st.ok || 0;
+      a.tot += t;
+    });
+
+    const lista = Object.keys(acc).map((ley) => ({
+      ley: ley, ok: acc[ley].ok, tot: acc[ley].tot,
+      pct: Math.round(acc[ley].ok / acc[ley].tot * 100)
+    })).sort((a, b) => a.pct - b.pct || b.tot - a.tot);
+
+    if (!lista.length) {
+      el.innerHTML = '<div class="mem-vacio">Todavía no hay datos por ley. Haz algún test.</div>';
+      return;
+    }
+
+    el.innerHTML = lista.map((x) =>
+      '<div class="ley-item">' +
+        '<div class="ley-cab"><span class="ley-nombre">' + this.esc(x.ley) + '</span>' +
+        '<span class="ley-pct ' + (x.pct >= 50 ? 'ok' : 'mal') + '">' + x.pct + '%</span></div>' +
+        '<div class="ley-barra"><i class="' + (x.pct >= 50 ? '' : 'mal') + '" style="width:' + x.pct + '%"></i></div>' +
+        '<div class="ley-meta">' + x.ok + ' aciertos de ' + x.tot + ' respuestas</div>' +
+      '</div>').join('');
+  },
+
+  /* ---------- buscador de preguntas ---------- */
+
+  buscar(texto) {
+    const el = document.getElementById('resultados-busqueda');
+    if (!el) return;
+    const q = String(texto || '').trim().toLowerCase();
+    if (q.length < 2) { el.innerHTML = ''; return; }
+
+    const res = [];
+    this.poolGlobal().forEach((p) => {
+      const enun = String(p.enunciado || '').toLowerCase();
+      const base = String(p.base || '').toLowerCase();
+      const ops = ['a', 'b', 'c', 'd'].map((l) => String((p.opciones || {})[l] || '')).join(' ').toLowerCase();
+      if (enun.indexOf(q) !== -1 || base.indexOf(q) !== -1 || ops.indexOf(q) !== -1) res.push(p);
+    });
+
+    if (!res.length) { el.innerHTML = '<div class="mem-vacio">Sin resultados.</div>'; return; }
+
+    el.innerHTML = res.slice(0, 30).map((p) => {
+      const st = this.porPregunta[this.clave(p)] || {};
+      return '<div class="res-busqueda">' +
+        '<div class="enun">' + this.esc(p.enunciado) + '</div>' +
+        '<div class="meta">' + this.esc(this.leyDe(p) || 'Sin base legal') +
+          ' · ' + this.esc(this.txtBloqueP(p)) +
+          ' · Aciertos ' + (st.ok || 0) + ' / Fallos ' + (st.mal || 0) + '</div>' +
+        '<div class="meta" style="margin-top:4px"><b>Correcta:</b> ' +
+          String(p.correcta || '').toUpperCase() + ') ' +
+          this.esc((p.opciones || {})[p.correcta] || '') + '</div>' +
+      '</div>';
+    }).join('') +
+    (res.length > 30 ? '<div class="mem-vacio">Mostrando 30 de ' + res.length + '. Afina la búsqueda.</div>' : '');
+  },
+
+  txtBloqueP(p) {
+    return { test: 'Test', caso: 'Caso práctico', informatica: 'Informática' }[this.bloqueDe(p)] || '';
   },
 
   pintarStatsGlobal() {
@@ -1844,6 +2147,8 @@ const App = {
       this.mini(pct + '%', 'Acierto global', pct >= 50 ? 'ok' : 'mal') +
       this.mini(mejor + '%', 'Mejor test') +
       this.mini(pctUlt5 + '%', 'Media últimos 5', pctUlt5 >= 50 ? 'ok' : 'mal') +
+      this.mini(this.rachaDias(), 'Días seguidos', this.rachaDias() > 0 ? 'ok' : '') +
+      this.mini(this.preguntasHoy(), 'Preguntas hoy') +
       this.mini(this.fallosDeBanco().length, 'Fallos pendientes') +
       this.mini(this.muyFalladasDeBanco(), 'Muy falladas', this.muyFalladasDeBanco() ? 'mal' : '');
   },
@@ -2379,7 +2684,94 @@ const App = {
     this.pintarSegModo();
   },
 
-  /* ================= export / import / reset ================= */
+  /* ================= avisos de versión e instalación ================= */
+
+  vigilarActualizaciones() {
+    if (!('serviceWorker' in navigator)) return;
+    const mostrar = () => {
+      const b = document.getElementById('banner-update');
+      if (b) b.classList.remove('hidden');
+    };
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (!reg) return;
+      if (reg.waiting) mostrar();
+      reg.addEventListener('updatefound', () => {
+        const nuevo = reg.installing;
+        if (!nuevo) return;
+        nuevo.addEventListener('statechange', () => {
+          if (nuevo.state === 'installed' && navigator.serviceWorker.controller) mostrar();
+        });
+      });
+    }).catch(() => {});
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      navigator.serviceWorker.getRegistration()
+        .then((r) => r && r.update().catch(() => {}))
+        .catch(() => {});
+    });
+  },
+
+  prepararInstalacion() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this._installEvt = e;
+      let oculto = false;
+      try { oculto = !!localStorage.getItem('testjusticia:install-oculto'); } catch (err) {}
+      const b = document.getElementById('banner-install');
+      if (b && !oculto) b.classList.remove('hidden');
+    });
+  },
+
+  instalar() {
+    const e = this._installEvt;
+    const b = document.getElementById('banner-install');
+    if (!e) {
+      this.toast('Usa el menú del navegador → «Añadir a pantalla de inicio»');
+      return;
+    }
+    e.prompt();
+    if (e.userChoice) {
+      e.userChoice.then(() => {
+        this._installEvt = null;
+        if (b) b.classList.add('hidden');
+      }).catch(() => {});
+    }
+  },
+
+  cerrarBannerInstall() {
+    const b = document.getElementById('banner-install');
+    if (b) b.classList.add('hidden');
+    try { localStorage.setItem('testjusticia:install-oculto', '1'); } catch (e) {}
+  },
+
+  /* ================= atajos de teclado =================
+     Flecha derecha: siguiente · Flecha izquierda: anterior
+     1/2/3/4: opciones A/B/C/D · B: dejar en blanco */
+
+  atajosTeclado(e) {
+    if (!this.sesion || this._vistaTest !== 'runner') return;
+    const t = e.target;
+    if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    if (e.key === 'ArrowRight') { e.preventDefault(); this.siguiente(); return; }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); this.anterior(); return; }
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); this.blanco(); return; }
+
+    const n = parseInt(e.key, 10);
+    if (!isNaN(n) && n >= 1 && n <= 4) {
+      e.preventDefault();
+      this.responder(['a', 'b', 'c', 'd'][n - 1]);
+    }
+  },
+
+  _irAPrimeraBlanca() {
+    const s = this.sesion;
+    if (!s) return;
+    const i = s.preguntas.findIndex((p, idx) =>
+      s.respuestas[idx] === undefined || s.respuestas[idx] === '');
+    if (i >= 0) this.irA(i);
+  },
 
   exportar() {
     const datos = {

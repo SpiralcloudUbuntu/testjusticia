@@ -41,10 +41,23 @@
     <header class="topbar">
       <button class="btn-menu" id="menu-toggle" type="button" aria-label="Menú">☰</button>
       <h1>TestJusticia <span class="sub">Tramitación Procesal y Administrativa · Andalucía</span></h1>
+      <button id="btn-cuenta" class="icon-btn cuenta-btn" type="button" title="Cambiar de cuenta">Señor de las Pruebas</button>
       <button id="btn-ajustes" class="icon-btn" type="button">Ajustes</button>
     </header>
 
     <div class="contenido">
+
+      <!-- ================= AVISO DE VERSION NUEVA ================= -->
+      <div id="banner-update" class="banner-update hidden">
+        <span>Hay una versión nueva de la app.</span>
+        <button id="btn-banner-update" class="btn-pri" type="button">Actualizar</button>
+      </div>
+
+      <div id="banner-install" class="banner-install hidden">
+        <span>Instala TestJusticia en tu pantalla de inicio.</span>
+        <button id="btn-install" class="btn-sec" type="button">Instalar</button>
+        <button id="btn-install-cerrar" class="icon-btn" type="button">✕</button>
+      </div>
 
       <!-- ================= INICIO ================= -->
       <section id="tab-inicio" class="tab-content">
@@ -194,13 +207,19 @@
               </div>
 
               <div class="sub-cfg">
-                <span class="sub-tit">Bloque</span>
+                <span class="sub-tit">Bloque (puedes marcar varios)</span>
                 <div class="chips-mini" id="cfg-bloque">
-                  <button class="chip-mini" type="button" data-bloque="todos">Todos</button>
-                  <button class="chip-mini" type="button" data-bloque="test">Test</button>
-                  <button class="chip-mini" type="button" data-bloque="caso">Caso práctico</button>
-                  <button class="chip-mini" type="button" data-bloque="informatica">Informática</button>
+                  <button class="chip-mini on" type="button" data-bloque="test">Test · 1er ejercicio</button>
+                  <button class="chip-mini on" type="button" data-bloque="caso">Caso práctico · 2º</button>
+                  <button class="chip-mini on" type="button" data-bloque="informatica">Informática · 3º</button>
                 </div>
+                <div class="cfg-nota" id="cfg-bloque-nota">Marcados los tres: entran preguntas de cualquier bloque.</div>
+              </div>
+
+              <div class="sub-cfg">
+                <span class="sub-tit">Ley</span>
+                <select id="cfg-ley" class="campo-select"></select>
+                <div class="cfg-nota">Solo aparecen las leyes que tienen preguntas en el banco.</div>
               </div>
 
               <div class="sub-cfg">
@@ -399,6 +418,17 @@
           <div id="stats-grafico" class="grafico"></div>
         </div>
         <div class="card">
+          <div class="card-label">Acierto por ley</div>
+          <div id="stats-leyes" class="lista-leyes"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Buscar preguntas</div>
+          <input type="search" id="buscador" class="campo-buscar" placeholder="Escribe una palabra: adopción, artículo 86, LEC…">
+          <div id="resultados-busqueda" class="lista-fallos" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card">
           <div class="card-label">Preguntas que más fallas</div>
           <div id="stats-falladas" class="lista-fallos"></div>
         </div>
@@ -488,6 +518,15 @@
       <label class="campo-fila">
         <input type="checkbox" id="set-oscuro">
         <span>Modo oscuro</span>
+      </label>
+
+      <label class="campo">
+        <span>Tamaño de letra</span>
+        <select id="set-letra">
+          <option value="normal">Normal</option>
+          <option value="grande">Grande</option>
+          <option value="muygrande">Muy grande</option>
+        </select>
       </label>
 
       <div class="campo-fila" style="justify-content:space-between">
