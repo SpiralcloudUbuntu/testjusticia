@@ -324,6 +324,14 @@
         <div class="test-layout con-nav" id="test-layout">
           <div class="pregunta">
             <div class="pregunta-num" id="pregunta-num">Pregunta 1</div>
+            <div class="caso-box hidden" id="caso-box">
+              <button class="caso-cab" id="caso-toggle" type="button">
+                <span class="caso-ico">▤</span>
+                <span class="caso-tit">Supuesto de hecho del caso práctico</span>
+                <span class="caso-flecha" id="caso-flecha">▾</span>
+              </button>
+              <div class="caso-texto hidden" id="caso-texto"></div>
+            </div>
             <div class="pregunta-enunciado" id="pregunta-enunciado"></div>
             <div class="opciones" id="opciones"></div>
             <div id="feedback" class="feedback hidden"></div>
@@ -610,6 +618,7 @@
 <script src="vendor/pdf.min.js"></script>
 <script src="datos/examenes.js"></script>
 <script src="datos/banco.js"></script>
+<script src="datos/casos.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 <script>

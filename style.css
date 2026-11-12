@@ -784,3 +784,30 @@ body.fuente-muygrande .test-item-m,body.fuente-muygrande .card-meta{font-size:.9
 .res-busqueda{border:1px solid var(--borde);border-radius:var(--radio);padding:11px 13px;background:var(--bg);margin-bottom:8px}
 .res-busqueda .enun{font-size:.9rem;line-height:1.45;margin-bottom:5px}
 .res-busqueda .meta{font-size:.72rem;color:var(--ink2)}
+
+/* ===================== SUPUESTO DE HECHO ===================== */
+.caso-box{
+  margin-bottom:16px;border:1px solid var(--borde);border-radius:var(--radio);
+  background:var(--bg);overflow:hidden;
+}
+.caso-cab{
+  width:100%;display:flex;align-items:center;gap:10px;
+  padding:12px 14px;background:none;border:0;font:inherit;font-weight:800;
+  font-size:.85rem;color:var(--ink);cursor:pointer;text-align:left;
+}
+.caso-cab:hover{background:rgba(37,99,235,.07)}
+.caso-ico{color:var(--azul2);font-size:1rem}
+.caso-tit{flex:1}
+.caso-flecha{color:var(--ink2);transition:transform .15s}
+.caso-box.abierto .caso-flecha{transform:rotate(180deg)}
+.caso-texto{
+  padding:14px 16px 16px;border-top:1px solid var(--borde);
+  font-size:.9rem;line-height:1.62;white-space:pre-wrap;
+  max-height:52vh;overflow-y:auto;
+}
+body.dark .caso-texto{color:#cbd5e1}
+@media (max-width:700px){ .caso-texto{max-height:46vh;font-size:.88rem} }
+
+.caso-rev{margin-bottom:12px;border:1px solid var(--borde);border-radius:var(--radio);background:var(--bg)}
+.caso-rev summary{padding:10px 13px;cursor:pointer;font-weight:800;font-size:.8rem;color:var(--azul2)}
+.caso-rev div{padding:0 14px 14px;font-size:.83rem;line-height:1.6;white-space:pre-wrap;max-height:40vh;overflow-y:auto}

@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -232,6 +232,8 @@ const App = {
     const bic = document.getElementById('btn-install-cerrar');
     if (bic) bic.addEventListener('click', () => this.cerrarBannerInstall());
     document.addEventListener('keydown', (e) => this.atajosTeclado(e));
+    const ct = document.getElementById('caso-toggle');
+    if (ct) ct.addEventListener('click', () => this.toggleCaso());
     const busc = document.getElementById('buscador');
     if (busc) {
       let t = null;
@@ -985,54 +987,25 @@ const App = {
 
   /* ================= configurador de test ================= */
 
-  /* Rangos explicitos de bloque dentro de un examen:
-     "test (1-104), caso práctico (105-116) y Windows/Office (117-140)" */
-  extraerRangosBloque(txt) {
-    const t = String(txt || '').toLowerCase();
-    const out = [];
-    const defs = [
-      ['test', /(?:cuestionario[- ]?test|\btest\b)\s*\(?\s*(\d{1,3})\s*[-–a]\s*(\d{1,3})\s*\)?/],
-      ['caso', /caso\s*pr[aá]ctico\s*\(?\s*(\d{1,3})\s*[-–a]\s*(\d{1,3})\s*\)?/],
-      ['informatica', /(?:windows|office|word|inform[aá]tica)\s*\/?\s*[a-z]*\s*\(?\s*(\d{1,3})\s*[-–a]\s*(\d{1,3})\s*\)?/]
-    ];
-    defs.forEach((par) => {
-      const m = t.match(par[1]);
-      if (m) out.push({ bloque: par[0], desde: parseInt(m[1], 10), hasta: parseInt(m[2], 10) });
-    });
-    return out;
-  },
-
-  /* Bloque de una pregunta: campo explicito, rango del examen o inferencia.
-     En Tramitación: test (1er ejercicio), caso práctico (2º) e informática (3º). */
+  /* Bloque de una pregunta: campo explicito, ejercicio declarado o examen.
+     En Tramitación: test (1er ejercicio), caso práctico (2º) e informática (3º).
+     El campo `ejercicio` del banco es la fuente fiable (1/2/3). */
   bloqueDe(p) {
-    if (p && p.bloque) return p.bloque;
-    const b = (this.bancos || []).find((x) => x.id === (p && p._banco));
-    const txt = b ? ((b.examen || '') + ' ' + (b.titulo || '')) : '';
-    const t = txt.toLowerCase();
+    if (!p) return 'test';
+    if (p.bloque) return p.bloque;
 
-    // 1) Rangos explicitos por numero de pregunta
-    this._rangosCache = this._rangosCache || {};
-    const clave = (p && p._banco) || '_';
-    if (!(clave in this._rangosCache)) this._rangosCache[clave] = this.extraerRangosBloque(txt);
-    const rangos = this._rangosCache[clave];
-    if (rangos && rangos.length && p && p.n) {
-      for (let i = 0; i < rangos.length; i++) {
-        if (p.n >= rangos[i].desde && p.n <= rangos[i].hasta) return rangos[i].bloque;
-      }
-    }
+    const b = (this.bancos || []).find((x) => x.id === p._banco);
+    const t = ((b ? (b.examen || '') + ' ' + (b.titulo || '') : '')).toLowerCase();
+    const tres = /tres ejercicios/.test(t);
 
-    // 2) El examen declara un unico ejercicio
-    const tresEjercicios = /tres ejercicios/.test(t);
-    if (!tresEjercicios) {
-      if (/word|excel|inform[aá]tica|ofim[aá]tica|tercer ejercicio/.test(t)) return 'informatica';
-      if (/caso\s*pr[aá]ctico|supuesto\s*pr[aá]ctico|segundo ejercicio/.test(t)) return 'caso';
-      return 'test';
-    }
+    // Examen de un unico ejercicio con nombre inequivoco
+    if (!tres && /word|excel|inform[aá]tica|ofim[aá]tica|tercer ejercicio/.test(t)) return 'informatica';
 
-    // 3) "Tres ejercicios" sin rangos: inferir por el enunciado
-    const e = String((p && p.enunciado) || '').toLowerCase();
-    if (/\bword\b|\bexcel\b|p[aá]rrafo|celda|hoja de c[aá]lculo|sangr[ií]a|margen|encabezado|pie de p[aá]gina|vi[nñ]eta|numeraci[oó]n|cuadro de di[aá]logo|pesta[nñ]a/.test(e)) return 'informatica';
-    if (/suponga|supuesto\s*pr[aá]ctico|se le requiere|comparece|debe resolver|se solicita/.test(e)) return 'caso';
+    const ej = parseInt(p.ejercicio, 10);
+    if (ej === 2) return 'caso';
+    if (ej === 3) return 'informatica';
+    if (ej === 1) return 'test';
+
     return 'test';
   },
 
@@ -1448,6 +1421,47 @@ const App = {
     }, 500);
   },
 
+  /* ================= supuesto de hecho del caso práctico =================
+     Las preguntas de caso (2º ejercicio) no se entienden sin el supuesto.
+     El texto oficial va en datos/casos.js, indexado por id de banco. */
+
+  casoDe(p) {
+    const id = p && p._banco;
+    if (!id) return '';
+    // El supuesto solo se muestra en las preguntas del 2º ejercicio
+    if (this.bloqueDe(p) !== 'caso') return '';
+    const m = (typeof window !== 'undefined' && window.CASOS) || {};
+    return m[id] || '';
+  },
+
+  pintarCaso(p) {
+    const box = document.getElementById('caso-box');
+    const txt = document.getElementById('caso-texto');
+    if (!box || !txt) return;
+    const caso = this.casoDe(p);
+    if (!caso) {
+      box.classList.add('hidden');
+      box.classList.remove('abierto');
+      txt.classList.add('hidden');
+      txt.textContent = '';
+      return;
+    }
+    box.classList.remove('hidden');
+    txt.textContent = caso;
+    const abierto = !!this._casoAbierto;
+    box.classList.toggle('abierto', abierto);
+    txt.classList.toggle('hidden', !abierto);
+  },
+
+  toggleCaso() {
+    const box = document.getElementById('caso-box');
+    const txt = document.getElementById('caso-texto');
+    if (!box || !txt) return;
+    this._casoAbierto = !this._casoAbierto;
+    box.classList.toggle('abierto', this._casoAbierto);
+    txt.classList.toggle('hidden', !this._casoAbierto);
+  },
+
   pintarPregunta() {
     try {
       const s = this.sesion;
@@ -1471,6 +1485,7 @@ const App = {
         ' <span class="badge ' + (esPre ? 'pre' : 'ofi') + '">' + (esPre ? 'Daniel Dorta' : 'Oficial') + '</span>' + hist;
 
       document.getElementById('pregunta-enunciado').textContent = p.enunciado;
+      this.pintarCaso(p);
 
       const cont = document.getElementById('opciones');
       cont.innerHTML = '';
@@ -1606,6 +1621,8 @@ const App = {
         '<span class="rev-est">' + est + '</span>' +
         '<span class="badge ' + (pre ? 'pre' : 'ofi') + '">' + (pre ? 'Daniel Dorta' : 'Oficial') + '</span></div>' +
         '<div class="rev-enun">' + this.esc(p.enunciado) + '</div>' +
+        (this.casoDe(p) ? '<details class="caso-rev"><summary>Supuesto de hecho del caso</summary><div>' +
+          this.esc(this.casoDe(p)) + '</div></details>' : '') +
         (r && r !== p.correcta ? '<div class="rev-tu">Tu respuesta: ' + r.toUpperCase() + ' — ' + this.esc(p.opciones[r] || '') + '</div>' : '') +
         (tipo === 'blanca' ? '<div class="rev-tu">No contestada</div>' : '') +
         '<div class="rev-ok">Correcta: ' + p.correcta.toUpperCase() + ' — ' + this.esc(p.opciones[p.correcta] || '') + '</div>' +
