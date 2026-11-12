@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>TestJusticia — Reparar actualización</title>
+<style>
+  :root{--azul:#144684;--azul2:#2563eb;--ink:#0f172a;--ink2:#475569;--bg:#f1f5f9;--card:#fff;--borde:#e2e8f0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);display:flex;align-items:center;justify-content:center;
+       min-height:100vh;padding:24px}
+  .caja{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:28px 26px;
+        max-width:520px;width:100%;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+  h1{margin:0 0 6px;font-size:1.35rem;color:var(--azul)}
+  .sub{color:var(--ink2);font-size:.9rem;line-height:1.55;margin:0 0 20px}
+  ul{color:var(--ink2);font-size:.85rem;line-height:1.6;padding-left:18px;margin:0 0 22px}
+  button{width:100%;padding:14px;border:0;border-radius:11px;font:inherit;font-weight:800;
+         font-size:1rem;color:#fff;background:linear-gradient(135deg,var(--azul),var(--azul2));cursor:pointer}
+  button:disabled{opacity:.6;cursor:default}
+  #log{margin:18px 0 0;padding:12px;background:#0f172a;color:#a7f3d0;border-radius:10px;
+       font-size:.76rem;line-height:1.5;white-space:pre-wrap;display:none;max-height:210px;overflow:auto}
+  .pie{margin-top:18px;font-size:.75rem;color:var(--ink2);text-align:center}
+  .pie a{color:var(--azul2);text-decoration:none}
+</style>
+</head>
+<body>
+  <div class="caja">
+    <h1>Reparar la app</h1>
+    <p class="sub">Estás viendo una versión antigua porque el navegador guardó una copia
+       del service worker antiguo. Este botón borra esa copia y descarga la app de nuevo.</p>
+    <ul>
+      <li>No borra tus tests, tus fallos ni tu racha.</li>
+      <li>Solo elimina el código viejo de la aplicación.</li>
+      <li>Tarda unos segundos.</li>
+    </ul>
+    <button id="go" type="button">Reparar y abrir la app</button>
+    <pre id="log"></pre>
+    <div class="pie">TestJusticia · página de reparación</div>
+  </div>
+
+<script>
+(function () {
+  var btn = document.getElementById('go');
+  var log = document.getElementById('log');
+  function diario(m) {
+    log.style.display = 'block';
+    log.textContent += m + '\n';
+  }
+
+  async function reparar() {
+    btn.disabled = true;
+    btn.textContent = 'Reparando…';
+    try {
+      if ('serviceWorker' in navigator) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        diario('Service workers encontrados: ' + regs.length);
+        for (var i = 0; i < regs.length; i++) {
+          var r = regs[i];
+          try { await r.update(); } catch (e) {}
+          var ok = await r.unregister();
+          diario((ok ? 'Desregistrado: ' : 'No se pudo desregistrar: ') + (r.scope || '(sin ámbito)'));
+        }
+      } else {
+        diario('Este navegador no tiene service workers.');
+      }
+
+      if (window.caches) {
+        var claves = await caches.keys();
+        diario('Cachés encontradas: ' + (claves.length ? claves.join(', ') : 'ninguna'));
+        for (var j = 0; j < claves.length; j++) {
+          await caches.delete(claves[j]);
+          diario('Borrada: ' + claves[j]);
+        }
+      }
+
+      diario('Listo. Abriendo la app actualizada…');
+      btn.textContent = 'Abriendo…';
+      setTimeout(function () {
+        location.replace('./?v=' + Date.now());
+      }, 900);
+    } catch (e) {
+      diario('Error: ' + (e && e.message ? e.message : e));
+      btn.disabled = false;
+      btn.textContent = 'Reintentar';
+    }
+  }
+
+  btn.addEventListener('click', reparar);
+})();
+</script>
+</body>
+</html>
