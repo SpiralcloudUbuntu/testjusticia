@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -2280,7 +2280,8 @@ const App = {
      y una marca de respuesta correcta. Si no la encuentra, se elige a mano. */
   parsearPreguntas(texto) {
     const t = String(texto || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ');
-    const rePreg = /(?:^|\n)\s*(?:pregunta\s+)?(\d{1,3})\s*[\.\)\-–—]\s+/gi;
+    // "1." "1)" "1.-" "1 -" "Pregunta 1"  (el ".-" es el formato habitual)
+    const rePreg = /(?:^|\n)\s*(?:pregunta\s+)?(\d{1,3})\s*[\.\)\-–—]+\s+/gi;
     const marcas = [];
     let m;
     while ((m = rePreg.exec(t)) !== null) {
@@ -2305,7 +2306,7 @@ const App = {
       }
 
       // Opciones
-      const reOp = /(?:^|\n)\s*([a-dA-D])\s*[\)\.\-–—]\s+/g;
+      const reOp = /(?:^|\n)\s*([a-dA-D])\s*[\)\.\-–—]+\s+/g;
       const pos = [];
       let mo;
       while ((mo = reOp.exec('\n' + bloque)) !== null) {
