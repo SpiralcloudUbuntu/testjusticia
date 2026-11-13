@@ -623,12 +623,28 @@
       <button id="btn-cerrar-texto-pdf" class="icon-btn" type="button">Cerrar</button>
     </div>
     <div class="modal-cuerpo">
-      <div id="texto-pdf-msg" class="card-meta" style="margin-bottom:12px"></div>
+      <div id="texto-pdf-msg" class="card-meta" style="margin-bottom:14px"></div>
+
+      <div id="ocr-bloque">
+        <button id="btn-ocr-pdf" class="btn-pri" type="button" style="width:100%">
+          Leerlo con OCR (recomendado)
+        </button>
+        <div class="cfg-nota" style="margin:8px 0 0;text-align:center">
+          Reconoce el texto de las páginas. Solo hace falta la primera vez.
+        </div>
+        <div id="ocr-progreso" class="ocr-progreso hidden">
+          <div class="ocr-barra"><i id="ocr-barra-fill"></i></div>
+          <div class="ocr-txt" id="ocr-txt">Preparando el OCR…</div>
+        </div>
+      </div>
+
+      <div class="ocr-sep"><span>o pega el texto a mano</span></div>
+
       <div class="card-meta" style="margin-bottom:8px">
         Abre el PDF, selecciona todo el texto (<b>Ctrl + A</b>), cópialo (<b>Ctrl + C</b>)
         y pégalo aquí abajo.
       </div>
-      <textarea id="texto-pdf-area" class="area-texto" rows="10"
+      <textarea id="texto-pdf-area" class="area-texto" rows="8"
         placeholder="Pega aquí el texto del examen…"></textarea>
       <div class="modal-acciones">
         <button id="btn-texto-pdf-procesar" class="btn-pri" type="button">Procesar texto</button>
@@ -639,6 +655,7 @@
 </div>
 
 <script src="vendor/pdf.min.js"></script>
+<script src="vendor/tesseract/tesseract.min.js"></script>
 <script src="datos/examenes.js"></script>
 <script src="datos/banco.js"></script>
 <script src="datos/casos.js"></script>

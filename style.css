@@ -788,6 +788,16 @@ body.fuente-muygrande .test-item-m,body.fuente-muygrande .card-meta{font-size:.9
   background:var(--card);color:var(--ink);
 }
 .area-texto:focus{outline:none;border-color:var(--azul2)}
+
+/* ===================== OCR ===================== */
+.ocr-progreso{margin-top:12px}
+.ocr-barra{height:9px;border-radius:99px;background:var(--borde);overflow:hidden}
+.ocr-barra i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--azul),var(--azul2));transition:width .25s}
+.ocr-txt{margin-top:7px;font-size:.78rem;color:var(--ink2);text-align:center}
+.ocr-sep{display:flex;align-items:center;gap:12px;margin:20px 0 14px;
+  color:var(--ink2);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+.ocr-sep::before,.ocr-sep::after{content:'';flex:1;height:1px;background:var(--borde)}
 .res-busqueda .enun{font-size:.9rem;line-height:1.45;margin-bottom:5px}
 .res-busqueda .meta{font-size:.72rem;color:var(--ink2)}
 

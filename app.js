@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v17';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -236,6 +236,8 @@ const App = {
     if (ct) ct.addEventListener('click', () => this.toggleCaso());
     const tpp = document.getElementById('btn-texto-pdf-procesar');
     if (tpp) tpp.addEventListener('click', () => this.procesarTextoPegado());
+    const bocr = document.getElementById('btn-ocr-pdf');
+    if (bocr) bocr.addEventListener('click', () => this.lanzarOCR());
     ['btn-texto-pdf-cancelar', 'btn-cerrar-texto-pdf'].forEach((id) => {
       const b = document.getElementById(id);
       if (b) b.addEventListener('click', () => this.cerrarImportTexto());
@@ -2280,8 +2282,9 @@ const App = {
      y una marca de respuesta correcta. Si no la encuentra, se elige a mano. */
   parsearPreguntas(texto) {
     const t = String(texto || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ');
-    // "1." "1)" "1.-" "1 -" "Pregunta 1"  (el ".-" es el formato habitual)
-    const rePreg = /(?:^|\n)\s*(?:pregunta\s+)?(\d{1,3})\s*[\.\)\-–—]+\s+/gi;
+    // "1." "1)" "1.-" "1 -" "Pregunta 1". El OCR a veces antepone basura
+    // corta ("El 1.-", "le 3.-"), asi que se toleran hasta 3 letras delante.
+    const rePreg = /(?:^|\n)[ \t]*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{0,3}[.,]?[ \t]*(\d{1,3})\s*[\.\)\-–—]+\s+/g;
     const marcas = [];
     let m;
     while ((m = rePreg.exec(t)) !== null) {
@@ -2306,7 +2309,7 @@ const App = {
       }
 
       // Opciones
-      const reOp = /(?:^|\n)\s*([a-dA-D])\s*[\)\.\-–—]+\s+/g;
+      const reOp = /(?:^|\n)\s*([a-dA-D])[a-dA-D]?\s*[\)\.\-–—]+\s*/g;
       const pos = [];
       let mo;
       while ((mo = reOp.exec('\n' + bloque)) !== null) {
@@ -2343,6 +2346,7 @@ const App = {
     event.target.value = '';
     if (!f) return;
     this._pdfTitulo = f.name.replace(/\.pdf$/i, '');
+    this._pdfFile = f;
     this.toast('Leyendo el PDF…');
     try {
       let r = await this.leerPDF(f);
@@ -2412,6 +2416,99 @@ const App = {
 
   cerrarImportTexto() {
     document.getElementById('modal-texto-pdf').classList.add('hidden');
+    const btn = document.getElementById('btn-ocr-pdf');
+    if (btn) { btn.disabled = false; btn.textContent = 'Leerlo con OCR (recomendado)'; }
+    const prog = document.getElementById('ocr-progreso');
+    if (prog) prog.classList.add('hidden');
+  },
+
+  /* OCR en el navegador con tesseract.js. Para PDFs con el texto convertido
+     a curvas (los de Daniel Dorta): se ve perfecto pero no hay nada que leer. */
+  async ocrPDF(file, onProgress) {
+    if (typeof Tesseract === 'undefined') throw new Error('OCR no disponible');
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({
+      data: buf,
+      cMapUrl: 'vendor/cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: 'vendor/standard_fonts/'
+    }).promise;
+    const total = pdf.numPages;
+    this._ocrPag = 1;
+    this._ocrTotal = total;
+
+    // El worker resuelve las rutas relativas contra su propia URL, asi que
+    // hay que pasarle URLs absolutas o buscaria vendor/tesseract/vendor/...
+    const base = new URL('vendor/tesseract/', location.href).href;
+    const worker = await Tesseract.createWorker('spa', 1, {
+      workerPath: base + 'worker.min.js',
+      corePath: base + 'tesseract-core-simd-lstm.wasm.js',
+      langPath: base + 'lang',
+      logger: (m) => {
+        if (m && m.status === 'recognizing text' && onProgress) {
+          const pct = ((this._ocrPag - 1) + (m.progress || 0)) / total;
+          onProgress(pct, this._ocrPag, total);
+        }
+      }
+    });
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    let texto = '';
+
+    try {
+      for (let i = 1; i <= total; i++) {
+        this._ocrPag = i;
+        if (onProgress) onProgress((i - 1) / total, i, total);
+        const page = await pdf.getPage(i);
+        const vp = page.getViewport({ scale: 2.2 });
+        canvas.width = Math.floor(vp.width);
+        canvas.height = Math.floor(vp.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        const res = await worker.recognize(canvas);
+        texto += ((res && res.data && res.data.text) || '') + '\n\n';
+        if (onProgress) onProgress(i / total, i, total);
+      }
+    } finally {
+      try { await worker.terminate(); } catch (e) {}
+    }
+    return { texto: texto, paginas: total };
+  },
+
+  async lanzarOCR() {
+    const f = this._pdfFile;
+    if (!f) { this.toast('Vuelve a elegir el PDF'); return; }
+    const btn = document.getElementById('btn-ocr-pdf');
+    const prog = document.getElementById('ocr-progreso');
+    const fill = document.getElementById('ocr-barra-fill');
+    const txt = document.getElementById('ocr-txt');
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Leyendo con OCR…'; }
+    if (prog) prog.classList.remove('hidden');
+    if (fill) fill.style.width = '0%';
+    if (txt) txt.textContent = 'Preparando el OCR… la primera vez tarda un poco.';
+
+    try {
+      const r = await this.ocrPDF(f, (pct, pag, total) => {
+        if (fill) fill.style.width = Math.round(pct * 100) + '%';
+        if (txt) txt.textContent = 'Página ' + pag + ' de ' + total + ' · ' + Math.round(pct * 100) + '%';
+      });
+
+      const preguntas = this.parsearPreguntas(r.texto);
+      if (!preguntas.length) {
+        if (txt) txt.textContent = 'OCR terminado, pero no he reconocido preguntas. Prueba a pegar el texto a mano.';
+        if (btn) { btn.disabled = false; btn.textContent = 'Reintentar OCR'; }
+        return;
+      }
+      this._pdfPreguntas = preguntas;
+      this._pdfTexto = r.texto;
+      document.getElementById('modal-texto-pdf').classList.add('hidden');
+      this.mostrarRevisionPDF();
+    } catch (e) {
+      console.error('OCR', e);
+      if (txt) txt.textContent = 'El OCR ha fallado: ' + (e.message || e);
+      if (btn) { btn.disabled = false; btn.textContent = 'Reintentar OCR'; }
+    }
   },
 
   mostrarRevisionPDF() {
