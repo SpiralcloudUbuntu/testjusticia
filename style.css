@@ -782,6 +782,12 @@ body.fuente-muygrande .test-item-m,body.fuente-muygrande .card-meta{font-size:.9
 }
 .campo-buscar:focus{outline:none;border-color:var(--azul2)}
 .res-busqueda{border:1px solid var(--borde);border-radius:var(--radio);padding:11px 13px;background:var(--bg);margin-bottom:8px}
+.area-texto{
+  font:inherit;font-size:.82rem;line-height:1.5;width:100%;min-height:170px;resize:vertical;
+  padding:12px 14px;border-radius:var(--radio);border:1.5px solid var(--borde);
+  background:var(--card);color:var(--ink);
+}
+.area-texto:focus{outline:none;border-color:var(--azul2)}
 .res-busqueda .enun{font-size:.9rem;line-height:1.45;margin-bottom:5px}
 .res-busqueda .meta{font-size:.72rem;color:var(--ink2)}
 

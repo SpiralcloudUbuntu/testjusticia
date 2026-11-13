@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -234,6 +234,12 @@ const App = {
     document.addEventListener('keydown', (e) => this.atajosTeclado(e));
     const ct = document.getElementById('caso-toggle');
     if (ct) ct.addEventListener('click', () => this.toggleCaso());
+    const tpp = document.getElementById('btn-texto-pdf-procesar');
+    if (tpp) tpp.addEventListener('click', () => this.procesarTextoPegado());
+    ['btn-texto-pdf-cancelar', 'btn-cerrar-texto-pdf'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener('click', () => this.cerrarImportTexto());
+    });
     const busc = document.getElementById('buscador');
     if (busc) {
       let t = null;
@@ -2229,25 +2235,45 @@ const App = {
     document.getElementById('file-pdf').click();
   },
 
-  async leerPDF(file) {
+  /* Extrae el texto de un PDF. Devuelve tambien cuantas paginas y fragmentos
+     ha visto, para poder diagnosticar sin adivinar. */
+  async leerPDF(file, extra) {
     if (typeof pdfjsLib === 'undefined') throw new Error('pdf.js no está cargado');
     const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await pdfjsLib.getDocument(Object.assign({
+      data: buf,
+      // Sin estos dos, pdf.js no decodifica las fuentes no estandar y el
+      // texto sale vacio en silencio: la app lo daba por "escaneado".
+      cMapUrl: 'vendor/cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: 'vendor/standard_fonts/'
+    }, extra || {})).promise;
+
     let texto = '';
+    let items = 0;
+    let conTexto = 0;
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const cont = await page.getTextContent();
+      let cont;
+      try {
+        cont = await page.getTextContent();
+      } catch (e) {
+        cont = { items: [] };
+      }
       let ultimaY = null;
-      cont.items.forEach((it) => {
-        const y = it.transform ? it.transform[5] : null;
+      (cont.items || []).forEach((it) => {
+        items++;
+        const str = (it && it.str) ? it.str : '';
+        if (str.trim()) conTexto++;
+        const y = (it && it.transform) ? it.transform[5] : null;
         if (ultimaY !== null && y !== null && Math.abs(y - ultimaY) > 4) texto += '\n';
-        texto += it.str;
-        if (it.hasEOL) texto += '\n';
+        texto += str;
+        if (it && it.hasEOL) texto += '\n';
         if (y !== null) ultimaY = y;
       });
       texto += '\n';
     }
-    return texto;
+    return { texto: texto, paginas: pdf.numPages, items: items, conTexto: conTexto };
   },
 
   /* Parser heuristico: busca "1." / "1)" / "Pregunta 1", opciones a) b) c) d)
@@ -2315,25 +2341,76 @@ const App = {
     const f = event.target.files && event.target.files[0];
     event.target.value = '';
     if (!f) return;
+    this._pdfTitulo = f.name.replace(/\.pdf$/i, '');
     this.toast('Leyendo el PDF…');
     try {
-      const texto = await this.leerPDF(f);
-      if (!String(texto).trim()) {
-        this.toast('Ese PDF no tiene texto: parece un escaneo. Necesita OCR.');
+      let r = await this.leerPDF(f);
+
+      if (!r.texto.trim()) {
+        this.toast('Reintentando con otras fuentes…');
+        const alternativas = [
+          { disableFontFace: true, useSystemFonts: true },
+          { disableFontFace: true, isEvalSupported: false, useSystemFonts: true }
+        ];
+        for (let k = 0; k < alternativas.length && !r.texto.trim(); k++) {
+          try { r = await this.leerPDF(f, alternativas[k]); }
+          catch (e2) { console.warn('reintento PDF', e2); }
+        }
+      }
+
+      if (!r.texto.trim()) {
+        this.mostrarImportTexto(r, false);
         return;
       }
-      const preguntas = this.parsearPreguntas(texto);
+
+      const preguntas = this.parsearPreguntas(r.texto);
       if (!preguntas.length) {
-        this.toast('No he reconocido preguntas en ese PDF.');
+        this.mostrarImportTexto(r, true);
         return;
       }
+
       this._pdfPreguntas = preguntas;
-      this._pdfTitulo = f.name.replace(/\.pdf$/i, '');
       this.mostrarRevisionPDF();
     } catch (e) {
       console.error('importarPDF', e);
       this.toast('No se pudo leer el PDF: ' + (e.message || e));
     }
+  },
+
+  /* El PDF no se deja leer: se ofrece pegar el texto. Nunca dejamos al
+     usuario con un "parece un escaneo" cuando puede que no lo sea. */
+  mostrarImportTexto(diag, habiaTexto) {
+    const msg = document.getElementById('texto-pdf-msg');
+    if (msg) {
+      msg.innerHTML = habiaTexto
+        ? 'El PDF sí tiene texto (' + diag.conTexto + ' fragmentos en ' + diag.paginas +
+          ' páginas), pero no he reconocido el formato de las preguntas. Pega el texto y lo intento otra vez.'
+        : 'No he podido extraer texto de ese PDF (' + diag.paginas + ' páginas, ' +
+          diag.items + ' fragmentos, ' + diag.conTexto + ' con texto). Puede que la capa de texto ' +
+          'no sea legible para el lector. Pega el texto a mano y seguimos.';
+    }
+    const a = document.getElementById('texto-pdf-area');
+    if (a) a.value = '';
+    document.getElementById('modal-texto-pdf').classList.remove('hidden');
+    setTimeout(() => { if (a) a.focus(); }, 120);
+  },
+
+  procesarTextoPegado() {
+    const a = document.getElementById('texto-pdf-area');
+    const t = ((a && a.value) || '').trim();
+    if (!t) { this.toast('Pega primero el texto del examen'); return; }
+    const preguntas = this.parsearPreguntas(t);
+    if (!preguntas.length) {
+      this.toast('No he reconocido preguntas en ese texto');
+      return;
+    }
+    document.getElementById('modal-texto-pdf').classList.add('hidden');
+    this._pdfPreguntas = preguntas;
+    this.mostrarRevisionPDF();
+  },
+
+  cerrarImportTexto() {
+    document.getElementById('modal-texto-pdf').classList.add('hidden');
   },
 
   mostrarRevisionPDF() {

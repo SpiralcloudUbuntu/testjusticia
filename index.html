@@ -615,6 +615,29 @@
   </div>
 </div>
 
+<!-- Modal: importar pegando el texto a mano (PDF con capa de texto ilegible) -->
+<div id="modal-texto-pdf" class="modal hidden">
+  <div class="modal-caja">
+    <div class="modal-cab">
+      <span>Importar pegando el texto</span>
+      <button id="btn-cerrar-texto-pdf" class="icon-btn" type="button">Cerrar</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div id="texto-pdf-msg" class="card-meta" style="margin-bottom:12px"></div>
+      <div class="card-meta" style="margin-bottom:8px">
+        Abre el PDF, selecciona todo el texto (<b>Ctrl + A</b>), cópialo (<b>Ctrl + C</b>)
+        y pégalo aquí abajo.
+      </div>
+      <textarea id="texto-pdf-area" class="area-texto" rows="10"
+        placeholder="Pega aquí el texto del examen…"></textarea>
+      <div class="modal-acciones">
+        <button id="btn-texto-pdf-procesar" class="btn-pri" type="button">Procesar texto</button>
+        <button id="btn-texto-pdf-cancelar" class="btn-sec" type="button">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="vendor/pdf.min.js"></script>
 <script src="datos/examenes.js"></script>
 <script src="datos/banco.js"></script>
