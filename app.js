@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -119,6 +119,49 @@ const App = {
       vistos.add(b.id);
       return true;
     });
+    this.aplicarEdiciones();
+  },
+
+  /* ================= gestión de preguntas ================= */
+
+  /* Las ediciones viven aparte del banco (que es fijo, viene de banco.js).
+     Se guardan por "banco#numero" y se aplican en memoria al arrancar. */
+  aplicarEdiciones() {
+    const ed = this.dget('ediciones', {}) || {};
+    const ks = Object.keys(ed);
+    if (!ks.length) return 0;
+    let n = 0;
+    (this.bancos || []).forEach((b) => {
+      (b.preguntas || []).forEach((p) => {
+        const o = ed[b.id + '#' + p.n];
+        if (!o) return;
+        if (o.enunciado != null) p.enunciado = o.enunciado;
+        if (o.opciones) p.opciones = Object.assign({}, p.opciones || {}, o.opciones);
+        if (o.correcta) p.correcta = o.correcta;
+        if (o.bloque) p.bloque = o.bloque;
+        if (o.ley != null) p.ley = o.ley;
+        n++;
+      });
+    });
+    return n;
+  },
+
+  guardarEdicion(bancoId, num, cambios) {
+    const ed = this.dget('ediciones', {}) || {};
+    const k = bancoId + '#' + num;
+    ed[k] = Object.assign({}, ed[k] || {}, cambios);
+    this.dset('ediciones', ed);
+
+    const b = (this.bancos || []).find((x) => x.id === bancoId);
+    const p = b && (b.preguntas || []).find((x) => x.n === num);
+    if (p) {
+      if (cambios.enunciado != null) p.enunciado = cambios.enunciado;
+      if (cambios.opciones) p.opciones = Object.assign({}, p.opciones || {}, cambios.opciones);
+      if (cambios.correcta) p.correcta = cambios.correcta;
+      if (cambios.bloque) p.bloque = cambios.bloque;
+      if (cambios.ley != null) p.ley = cambios.ley;
+    }
+    this.toast('Pregunta guardada');
   },
 
   cambiarCuenta(c) {
@@ -238,6 +281,53 @@ const App = {
     if (tpp) tpp.addEventListener('click', () => this.procesarTextoPegado());
     const bocr = document.getElementById('btn-ocr-pdf');
     if (bocr) bocr.addEventListener('click', () => this.lanzarOCR());
+
+    /* --- Gestión de preguntas --- */
+    const gpdf = document.getElementById('btn-gestion-pdf');
+    if (gpdf) gpdf.addEventListener('click', () => this.abrirImportPDF());
+    const gl = document.getElementById('ges-lista');
+    if (gl) {
+      gl.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('.ges-guardar');
+        if (b) this.guardarDesdeItem(b.closest('.ges-item'));
+      });
+    }
+    this.$$('#ges-bloque [data-bloque]').forEach((b) => b.addEventListener('click', () => {
+      const f = this.gesFiltro();
+      const x = b.dataset.bloque;
+      const i = f.bloques.indexOf(x);
+      if (i >= 0) {
+        if (f.bloques.length === 1) { this.toast('Deja al menos un bloque marcado'); return; }
+        f.bloques.splice(i, 1);
+      } else {
+        f.bloques.push(x);
+      }
+      f.limite = 25;
+      this.pintarGestion();
+    }));
+    const gsel = document.getElementById('ges-ley');
+    if (gsel) gsel.addEventListener('change', () => {
+      this.gesFiltro().ley = gsel.value;
+      this.gesFiltro().limite = 25;
+      this.pintarGestion();
+    });
+    const gbus = document.getElementById('ges-buscar');
+    if (gbus) {
+      let gt = null;
+      gbus.addEventListener('input', () => {
+        clearTimeout(gt);
+        gt = setTimeout(() => {
+          this.gesFiltro().q = gbus.value;
+          this.gesFiltro().limite = 25;
+          this.pintarGestion();
+        }, 250);
+      });
+    }
+    const gmas = document.getElementById('ges-mas');
+    if (gmas) gmas.addEventListener('click', () => {
+      this.gesFiltro().limite += 25;
+      this.pintarGestion();
+    });
     ['btn-texto-pdf-cancelar', 'btn-cerrar-texto-pdf'].forEach((id) => {
       const b = document.getElementById(id);
       if (b) b.addEventListener('click', () => this.cerrarImportTexto());
@@ -489,6 +579,7 @@ const App = {
     this.$$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
     this.cerrarMenu();
     if (id === 'tab-memoria') this.pintarMemoria();
+    if (id === 'tab-gestion') this.pintarGestion();
     if (id === 'tab-resultados') this.pintarListaTests();
     if (id === 'tab-test') {
       // La pestaña Test abre SIEMPRE la portada, para elegir como hacerlo.
@@ -2230,6 +2321,148 @@ const App = {
     ).join('');
   },
 
+  /* ================= gestión de preguntas ================= */
+
+  gesFiltro() {
+    if (!this._ges) {
+      this._ges = { bloques: ['test', 'caso', 'informatica'], ley: 'todas', q: '', limite: 25 };
+    }
+    return this._ges;
+  },
+
+  poolGestion() {
+    const f = this.gesFiltro();
+    const q = String(f.q || '').toLowerCase().trim();
+    return this.poolGlobal().filter((p) => {
+      if (f.bloques.length < 3 && f.bloques.indexOf(this.bloqueDe(p)) === -1) return false;
+      if (f.ley !== 'todas' && this.leyDe(p) !== f.ley) return false;
+      if (q) {
+        const enun = String(p.enunciado || '').toLowerCase();
+        const ops = ['a', 'b', 'c', 'd']
+          .map((l) => String((p.opciones || {})[l] || '').toLowerCase()).join(' ');
+        if (enun.indexOf(q) === -1 && ops.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  },
+
+  nombreBanco(id) {
+    const b = (this.bancos || []).find((x) => x.id === id);
+    return b ? (b.titulo || id) : (id || 'banco');
+  },
+
+  pintarGestion() {
+    const el = document.getElementById('ges-lista');
+    if (!el) return;
+    const f = this.gesFiltro();
+
+    this.$$('#ges-bloque [data-bloque]').forEach((b) =>
+      b.classList.toggle('on', f.bloques.indexOf(b.dataset.bloque) !== -1));
+
+    const leyes = this.leyesDisponibles();
+    const sel = document.getElementById('ges-ley');
+    if (sel) {
+      sel.innerHTML = ['<option value="todas">Todas las leyes</option>']
+        .concat(leyes.map((x) => '<option value="' + this.esc(x.ley) + '">' +
+          this.esc(x.ley) + ' (' + x.n + ')</option>')).join('');
+      sel.value = f.ley;
+    }
+
+    const bus = document.getElementById('ges-buscar');
+    if (bus && bus.value !== f.q) bus.value = f.q;
+
+    const lista = this.poolGestion();
+    const cont = document.getElementById('ges-cont');
+    if (cont) {
+      cont.textContent = lista.length + ' pregunta' + (lista.length === 1 ? '' : 's') +
+        ' con estos filtros · mostrando ' + Math.min(f.limite, lista.length);
+    }
+
+    const ed = this.dget('ediciones', {}) || {};
+    const leyesTodas = leyes.map((x) => x.ley);
+
+    if (!lista.length) {
+      el.innerHTML = '<div class="ges-vacio">No hay preguntas con esos filtros.</div>';
+      const m0 = document.getElementById('ges-mas');
+      if (m0) m0.classList.add('hidden');
+      return;
+    }
+
+    el.innerHTML = lista.slice(0, f.limite).map((p, i) => {
+      const banco = p._banco || '';
+      const k = banco + '#' + p.n;
+      const esEdit = !!ed[k];
+      const ley = this.leyDe(p);
+
+      const ops = ['a', 'b', 'c', 'd'].map((l) =>
+        '<div class="ges-op">' +
+          '<input type="radio" name="ges-ok-' + i + '" value="' + l + '"' +
+            (p.correcta === l ? ' checked' : '') + '>' +
+          '<span class="letra">' + l.toUpperCase() + '</span>' +
+          '<input type="text" class="ges-optxt" data-op="' + l + '" value="' +
+            this.esc((p.opciones || {})[l] || '') + '">' +
+        '</div>').join('');
+
+      const leyOpts = ['<option value="">(sin ley)</option>']
+        .concat(leyesTodas.map((x) => '<option value="' + this.esc(x) + '"' +
+          (x === ley ? ' selected' : '') + '>' + this.esc(x) + '</option>')).join('');
+
+      const bloqueOpts = [
+        ['test', 'Test · 1er ejercicio'],
+        ['caso', 'Caso práctico · 2º'],
+        ['informatica', 'Informática · 3º']
+      ].map((par) => '<option value="' + par[0] + '"' +
+        (this.bloqueDe(p) === par[0] ? ' selected' : '') + '>' + par[1] + '</option>').join('');
+
+      return '<div class="ges-item' + (esEdit ? ' editada' : '') +
+        '" data-banco="' + this.esc(banco) + '" data-n="' + p.n + '">' +
+        '<div class="ges-cab">' +
+          '<span class="ges-badge">' + this.esc(this.nombreBanco(banco)) + ' · nº ' + p.n + '</span>' +
+          '<span class="ges-badge">' + this.esc(this.txtBloqueP(p)) + '</span>' +
+          '<span class="ges-badge">' + this.esc(ley || 'sin ley') + '</span>' +
+          (esEdit ? '<span class="ges-badge edit">editada</span>' : '') +
+        '</div>' +
+        '<textarea class="ges-enun" data-campo="enunciado">' + this.esc(p.enunciado) + '</textarea>' +
+        ops +
+        '<div class="ges-meta">' +
+          '<select data-campo="bloque">' + bloqueOpts + '</select>' +
+          '<select data-campo="ley">' + leyOpts + '</select>' +
+          '<button class="ges-guardar" type="button">Guardar</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    const mas = document.getElementById('ges-mas');
+    if (mas) mas.classList.toggle('hidden', lista.length <= f.limite);
+  },
+
+  guardarDesdeItem(item) {
+    if (!item) return;
+    const banco = item.dataset.banco;
+    const num = parseInt(item.dataset.n, 10);
+    const enunciado = ((item.querySelector('[data-campo="enunciado"]') || {}).value || '').trim();
+    const opciones = {};
+    item.querySelectorAll('.ges-optxt').forEach((inp) => { opciones[inp.dataset.op] = inp.value.trim(); });
+    const radio = item.querySelector('input[type=radio]:checked');
+    const correcta = radio ? radio.value : '';
+    const bloque = (item.querySelector('[data-campo="bloque"]') || {}).value || '';
+    const ley = (item.querySelector('[data-campo="ley"]') || {}).value || '';
+
+    if (!enunciado) { this.toast('El enunciado no puede estar vacío'); return; }
+    if (!correcta) { this.toast('Marca cuál es la opción correcta'); return; }
+    if (!opciones[correcta]) { this.toast('La opción marcada como correcta está vacía'); return; }
+
+    this.guardarEdicion(banco, num, {
+      enunciado: enunciado,
+      opciones: opciones,
+      correcta: correcta,
+      bloque: bloque,
+      ley: ley
+    });
+    item.classList.add('editada');
+    this.pintarGestion();
+  },
+
   /* ================= importar PDF ================= */
 
   abrirImportPDF() {
@@ -2278,66 +2511,130 @@ const App = {
     return { texto: texto, paginas: pdf.numPages, items: items, conTexto: conTexto };
   },
 
-  /* Parser heuristico: busca "1." / "1)" / "Pregunta 1", opciones a) b) c) d)
-     y una marca de respuesta correcta. Si no la encuentra, se elige a mano. */
-  parsearPreguntas(texto) {
-    const t = String(texto || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ');
-    // "1." "1)" "1.-" "1 -" "Pregunta 1". El OCR a veces antepone basura
-    // corta ("El 1.-", "le 3.-"), asi que se toleran hasta 3 letras delante.
-    const rePreg = /(?:^|\n)[ \t]*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{0,3}[.,]?[ \t]*(\d{1,3})\s*[\.\)\-–—]+\s+/g;
-    const marcas = [];
+  /* ---------- limpieza del texto que sale de un PDF o de un OCR ---------- */
+
+  /* Quita cabeceras y pies que el OCR convierte en lineas de contenido.
+     El pie de Daniel Dorta acababa siendo la opcion d) de alguna pregunta. */
+  limpiarTextoPDF(texto) {
+    let t = String(texto || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ');
+    const ruido = [
+      /^[^\n]*preparadordaniel[^\n]*$/gim,
+      /^[^\n]*danieldortajusticia[^\n]*$/gim,
+      /^[^\n]*daniel dorta justicia[^\n]*$/gim,
+      /^[^\n]*PREPARADOR DE OPOSICIONES[^\n]*$/gim,
+      /^[^\n]*\bDANIEL DORTA\b[^\n]*$/gim,
+      /^[^\n]*\bP[áa]gina \d+( de \d+)?\b[^\n]*$/gim,
+      /^[^\n]*\bwww\.[^\s]+[^\n]*$/gim,
+      /^[^\n]*\bhttps?:\/\/[^\s]+[^\n]*$/gim
+    ];
+    ruido.forEach((re) => { t = t.replace(re, ''); });
+    return t.replace(/\n{3,}/g, '\n\n');
+  },
+
+  /* Una "opcion" que en realidad es contacto, publicidad o basura. */
+  esOpcionBasura(s) {
+    const x = String(s || '').trim().toLowerCase();
+    if (x.length < 2) return true;
+    if (/@|gmail|instagram|facebook|whatsapp|telegram|www\.|https?:\/\//.test(x)) return true;
+    if (/preparadordaniel|daniel dorta/.test(x)) return true;
+    return false;
+  },
+
+  /* Marcas de opcion a) b) c) d), tolerando el ruido tipico del OCR:
+     "Cc)", "a.-", "a )" y letras duplicadas. */
+  marcasOpcion(t) {
+    const re = /(?:^|\n) *([a-dA-D])[a-dA-D]? *[\)\.\-–—]+ */g;
+    const out = [];
     let m;
-    while ((m = rePreg.exec(t)) !== null) {
-      marcas.push({ num: m[1], ini: rePreg.lastIndex, pos: m.index });
+    while ((m = re.exec(t)) !== null) {
+      out.push({ letra: m[1].toLowerCase(), pos: m.index, ini: re.lastIndex });
     }
+    return out;
+  },
+
+  /* Parser por grupos de opciones.
+     Antes se cortaba el texto por el numero de pregunta; si el OCR se comia un
+     numero, el enunciado de una pregunta se juntaba con las opciones de la
+     siguiente. Ahora el ancla es la opcion a): cada pregunta va de una a) a la
+     siguiente, y el enunciado es lo que hay entre el ultimo numero y esa a). */
+  parsearPreguntas(texto) {
+    const t = this.limpiarTextoPDF(texto);
+    const marcas = this.marcasOpcion(t);
     if (!marcas.length) return [];
 
+    // Agrupar {a,b,c,d} desde cada 'a' hasta el siguiente
+    const grupos = [];
+    let cur = null;
+    marcas.forEach((m) => {
+      if (m.letra === 'a') {
+        if (cur) grupos.push(cur);
+        cur = { a: m };
+      } else if (cur && !cur[m.letra]) {
+        cur[m.letra] = m;
+      }
+    });
+    if (cur) grupos.push(cur);
+
+    const reNum = /(?:^|\n) *[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{0,3}[.,]? *(\d{1,3})\s*[\.\)\-–—]+\s+/g;
     const out = [];
-    marcas.forEach((mk, k) => {
-      const fin = (k + 1 < marcas.length) ? marcas[k + 1].pos : t.length;
-      let bloque = t.slice(mk.ini, fin).trim();
-      if (!bloque) return;
 
-      // Respuesta correcta explicita. Primero "Respuesta/Solucion"; si no hay,
-      // una marca "correcta: X". Sin la bandera i, "Respuesta" no casaba.
-      let correcta = '';
-      let mr = bloque.match(/(?:respuesta|soluci[oó]n)\s*(?:correcta)?\s*[:\-–—]?\s*([a-dA-D])\b/i);
-      if (!mr) mr = bloque.match(/\bcorrecta\s*[:\-–—]\s*([a-dA-D])\b/i);
-      if (mr) {
-        correcta = mr[1].toLowerCase();
-        bloque = bloque.slice(0, mr.index).trim();
+    grupos.forEach((g, k) => {
+      const letras = ['a', 'b', 'c', 'd'].filter((l) => g[l]);
+      if (letras.length < 3) return;
+
+      const finGrupo = (k + 1 < grupos.length) ? grupos[k + 1].a.pos : t.length;
+
+      // Enunciado: desde el ultimo numero de pregunta anterior a la a)
+      const antes = t.slice(0, g.a.pos);
+      let iniEnun = 0;
+      let num = '';
+      let mn;
+      reNum.lastIndex = 0;
+      while ((mn = reNum.exec(antes)) !== null) {
+        iniEnun = mn.index;
+        num = mn[1];
       }
-
-      // Opciones
-      const reOp = /(?:^|\n)\s*([a-dA-D])[a-dA-D]?\s*[\)\.\-–—]+\s*/g;
-      const pos = [];
-      let mo;
-      while ((mo = reOp.exec('\n' + bloque)) !== null) {
-        pos.push({ letra: mo[1].toLowerCase(), ini: mo.index, fin: reOp.lastIndex });
-      }
-      if (pos.length < 2) return;
-
-      const enunciado = ('\n' + bloque).slice(0, pos[0].ini).trim();
+      let enunciado = t.slice(iniEnun, g.a.pos).trim();
+      enunciado = enunciado.replace(/^[^\n]*?\d{1,3}\s*[\.\)\-–—]+\s*/, '').trim();
       if (enunciado.length < 10) return;
 
+      // Respuesta explicita, si el examen la trae escrita
+      let correcta = '';
+      const trozo = t.slice(g.a.pos, finGrupo);
+      const mr = trozo.match(/(?:respuesta|soluci[oó]n)\s*(?:correcta)?\s*[:\-–—]?\s*([a-dA-D])\b/i) ||
+                 trozo.match(/\bcorrecta\s*[:\-–—]\s*([a-dA-D])\b/i);
+      if (mr) correcta = mr[1].toLowerCase();
+
       const opciones = { a: '', b: '', c: '', d: '' };
-      pos.forEach((p, i) => {
-        const finOp = (i + 1 < pos.length) ? pos[i + 1].ini : ('\n' + bloque).length;
-        const val = ('\n' + bloque).slice(p.fin, finOp).trim();
-        if (['a', 'b', 'c', 'd'].includes(p.letra)) opciones[p.letra] = val;
+      letras.forEach((l, i) => {
+        const desde = g[l].ini;
+        let hasta;
+        if (i + 1 < letras.length) {
+          hasta = g[letras[i + 1]].pos;
+        } else {
+          // La ultima opcion termina donde empieza la siguiente pregunta
+          const resto = t.slice(desde, finGrupo);
+          const m2 = resto.match(/\n *[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{0,3}[.,]? *\d{1,3}\s*[\.\)\-–—]+\s+/);
+          hasta = m2 ? desde + m2.index : finGrupo;
+        }
+        let val = String(t.slice(desde, hasta)).replace(/\s+/g, ' ').trim();
+        if (this.esOpcionBasura(val)) return;
+        opciones[l] = val;
       });
 
       const rellenas = ['a', 'b', 'c', 'd'].filter((l) => opciones[l]);
-      if (rellenas.length < 2) return;
+      if (rellenas.length < 3) return;
 
       out.push({
         n: out.length + 1,
-        enunciado,
+        num: num,
+        enunciado: enunciado.replace(/\s+/g, ' ').trim(),
         opciones,
         correcta: (correcta && opciones[correcta]) ? correcta : '',
         fuente: 'preparador'
       });
     });
+
     return out;
   },
 

@@ -28,6 +28,7 @@
     <button class="nav-btn" type="button" data-tab="tab-resultados"><span class="ic">◎</span> Resultados</button>
     <button class="nav-btn" type="button" data-tab="tab-stats"><span class="ic">▤</span> Estadísticas</button>
     <button class="nav-btn" type="button" data-tab="tab-memoria"><span class="ic">★</span> MemorIA</button>
+    <button class="nav-btn" type="button" data-tab="tab-gestion"><span class="ic">☰</span> Gestión</button>
 
     <div class="side-pie">
       <button class="nav-btn js-ajustes" type="button"><span class="ic">⚙</span> Ajustes</button>
@@ -469,6 +470,50 @@
             <button class="fchip" type="button" data-mem="dominadas">Dominadas</button>
           </div>
           <div id="memoria-lista" class="memoria-lista"></div>
+        </div>
+      </section>
+
+      <!-- ================= GESTIÓN DE PREGUNTAS ================= -->
+      <section id="tab-gestion" class="tab-content hidden">
+        <div class="card">
+          <div class="card-label">Cargar exámenes</div>
+          <div class="card-titulo">Subir un PDF</div>
+          <div class="card-meta">
+            Se abre la revisión previa antes de guardar nada: puedes excluir preguntas
+            y marcar la correcta en las que falte.
+          </div>
+          <div class="test-nav">
+            <button id="btn-gestion-pdf" class="btn-pri" type="button">Subir PDF</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Filtrar</div>
+          <div class="sub-cfg">
+            <span class="sub-tit">Bloque</span>
+            <div class="chips-mini" id="ges-bloque">
+              <button class="chip-mini on" type="button" data-bloque="test">Test · 1º</button>
+              <button class="chip-mini on" type="button" data-bloque="caso">Caso práctico · 2º</button>
+              <button class="chip-mini on" type="button" data-bloque="informatica">Informática · 3º</button>
+            </div>
+          </div>
+          <div class="sub-cfg">
+            <span class="sub-tit">Ley</span>
+            <select id="ges-ley" class="campo-select"></select>
+          </div>
+          <div class="sub-cfg">
+            <span class="sub-tit">Buscar en el enunciado</span>
+            <input type="search" id="ges-buscar" class="campo-buscar" placeholder="Escribe una palabra…">
+          </div>
+          <div class="cfg-nota" id="ges-cont"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Preguntas</div>
+          <div id="ges-lista" class="ges-lista"></div>
+          <div class="test-nav">
+            <button id="ges-mas" class="btn-sec hidden" type="button">Ver más</button>
+          </div>
         </div>
       </section>
 
