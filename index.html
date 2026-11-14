@@ -584,6 +584,21 @@
         </select>
       </label>
 
+      <div class="card-label" style="margin-top:22px">Sincronización entre dispositivos</div>
+      <div class="cfg-nota">
+        Pon la misma clave en el PC y en el móvil. Los exámenes que subas y los
+        cambios que hagas se guardan ahí y se ven en los dos.
+      </div>
+      <label class="campo">
+        <span>Clave de sincronización</span>
+        <input id="sy-codigo" class="campo-buscar" placeholder="por ejemplo: carolina-2026" autocomplete="off">
+      </label>
+      <div class="test-nav">
+        <button id="btn-sy-activar" class="btn-pri" type="button">Activar</button>
+        <button id="btn-sy-desactivar" class="btn-sec" type="button">Desactivar</button>
+      </div>
+      <div class="cfg-nota" id="sy-estado">Sin sincronización.</div>
+
       <div class="campo-fila" style="justify-content:space-between">
         <span>Versión <b id="app-version">—</b></span>
         <button id="btn-actualizar" class="btn-sec" type="button">Buscar actualización</button>
@@ -711,6 +726,7 @@
 <!-- <script src="datos/banco.js"></script> -->
 <script src="datos/casos.js"></script>
 <script src="db.js"></script>
+<script src="sync.js"></script>
 <script src="app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {

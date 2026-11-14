@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -59,6 +59,7 @@ const App = {
     this.pintarMemoria();
     this.pintarListaTests();
     this.enganchar();
+    this.initSync();
     this.vigilarActualizaciones();
     this.prepararInstalacion();
     this.vistaTest('portada');
@@ -287,6 +288,11 @@ const App = {
     if (gpdf) gpdf.addEventListener('click', () => this.abrirImportPDF());
     const gvac = document.getElementById('btn-vaciar-preguntas');
     if (gvac) gvac.addEventListener('click', () => this.vaciarPreguntas());
+
+    const sact = document.getElementById('btn-sy-activar');
+    if (sact) sact.addEventListener('click', () => this.activarSync());
+    const sdes = document.getElementById('btn-sy-desactivar');
+    if (sdes) sdes.addEventListener('click', () => this.desactivarSync());
     const gl = document.getElementById('ges-lista');
     if (gl) {
       gl.addEventListener('click', (e) => {
@@ -1888,6 +1894,7 @@ const App = {
     this.dset('historial', this.historial);
     this.dset('porPregunta', this.porPregunta);
     this.dset('fallos', this.fallos);
+    this.pushSync();
 
     // Recuento por examen oficial: veces hechos y mejor nota (para la lista de "Exámenes oficiales").
     if (s.examenId) {
@@ -2323,6 +2330,177 @@ const App = {
     ).join('');
   },
 
+  /* ================= sincronización entre dispositivos ================= */
+
+  initSync() {
+    try {
+      if (typeof SyncTJ === 'undefined') return;
+      SyncTJ.cuenta = this.cuenta;
+      const act = SyncTJ.cargar();
+      const inp = document.getElementById('sy-codigo');
+      if (inp) inp.value = SyncTJ.codigo || '';
+      this.pintarSyncEstado();
+      if (act) this.pullSync(true);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.pullSync(false);
+      });
+    } catch (e) {
+      console.warn('initSync', e);
+    }
+  },
+
+  pintarSyncEstado(txt) {
+    const el = document.getElementById('sy-estado');
+    if (!el) return;
+    if (txt) { el.textContent = txt; return; }
+    if (!SyncTJ.activo) { el.textContent = 'Sin sincronización.'; return; }
+    const hora = SyncTJ._ultimoPull
+      ? new Date(SyncTJ._ultimoPull).toLocaleTimeString('es-ES')
+      : 'pendiente';
+    el.textContent = 'Activa con la clave «' + SyncTJ.codigo + '». Última lectura: ' + hora + '.';
+  },
+
+  activarSync() {
+    const inp = document.getElementById('sy-codigo');
+    const c = ((inp && inp.value) || '').trim();
+    if (c.length < 4) { this.toast('La clave debe tener al menos 4 caracteres'); return; }
+    SyncTJ.guardar(c, true);
+    SyncTJ.cuenta = this.cuenta;
+    this.pintarSyncEstado('Conectando…');
+    this.pullSync(true).then(() => this.pushSync(true));
+  },
+
+  desactivarSync() {
+    SyncTJ.guardar(null, false);
+    this.pintarSyncEstado();
+    this.toast('Sincronización desactivada en este dispositivo');
+  },
+
+  async pullSync(forzar) {
+    if (!SyncTJ.activo) return 0;
+    if (!forzar && Date.now() - SyncTJ._ultimoPull < 30000) return 0;
+    try {
+      SyncTJ.cuenta = this.cuenta;
+      const rem = await SyncTJ.pull();
+      const cambios = this.mergeRemoto(rem);
+      this.pintarSyncEstado();
+      if (cambios) {
+        this.pintarGestion();
+        this.pintarInicio();
+        this.pintarStats();
+        this.toast('Sincronizado: ' + cambios + ' cambio(s) recibidos');
+      }
+      return cambios;
+    } catch (e) {
+      console.warn('sync pull', e);
+      this.pintarSyncEstado('No se pudo leer (' + e.message + ')');
+      return 0;
+    }
+  },
+
+  /* Une lo que llega del servidor con lo local sin pisar lo que ya hay. */
+  mergeRemoto(rem) {
+    if (!rem) return 0;
+    let cambios = 0;
+
+    const locales = this.dget('bancos', []) || [];
+    const porId = {};
+    locales.forEach((b) => { if (b && b.id) porId[b.id] = b; });
+    (rem.bancos || []).forEach((b) => {
+      if (!b || !b.id) return;
+      const l = porId[b.id];
+      if (!l || (b.preguntas || []).length > (l.preguntas || []).length) {
+        porId[b.id] = b;
+        cambios++;
+      }
+    });
+    if (cambios) this.dset('bancos', Object.keys(porId).map((k) => porId[k]));
+
+    const edL = this.dget('ediciones', {}) || {};
+    const edR = rem.ediciones || {};
+    let edNuevas = 0;
+    Object.keys(edR).forEach((k) => {
+      if (!edL[k]) { edL[k] = edR[k]; edNuevas++; }
+    });
+    if (edNuevas) { this.dset('ediciones', edL); cambios += edNuevas; }
+
+    const pr = rem.progreso || {};
+
+    if (Array.isArray(pr.historial)) {
+      const h = this.dget('historial', []) || [];
+      const vistos = new Set(h.map((x) => x.fecha + '|' + x.modo + '|' + x.total));
+      const nuevos = pr.historial.filter((x) => !vistos.has(x.fecha + '|' + x.modo + '|' + x.total));
+      if (nuevos.length) { this.dset('historial', h.concat(nuevos)); cambios += nuevos.length; }
+    }
+
+    if (pr.memoria) {
+      const mL = this.dget('memoria', {}) || {};
+      let n = 0;
+      Object.keys(pr.memoria).forEach((k) => {
+        const r = pr.memoria[k], l = mL[k];
+        if (!l || (r.dias || 0) > (l.dias || 0)) { mL[k] = r; n++; }
+      });
+      if (n) { this.dset('memoria', mL); cambios += n; }
+    }
+
+    if (pr.porPregunta) {
+      const pl = this.dget('porPregunta', {}) || {};
+      let n = 0;
+      Object.keys(pr.porPregunta).forEach((k) => {
+        const r = pr.porPregunta[k] || {};
+        const l = pl[k] || { ok: 0, mal: 0 };
+        const ok = Math.max(r.ok || 0, l.ok || 0);
+        const mal = Math.max(r.mal || 0, l.mal || 0);
+        if (ok !== (l.ok || 0) || mal !== (l.mal || 0)) { pl[k] = { ok: ok, mal: mal }; n++; }
+      });
+      if (n) { this.dset('porPregunta', pl); cambios += n; }
+    }
+
+    if (pr.actividad) {
+      const al = this.dget('actividad', {}) || {};
+      let n = 0;
+      Object.keys(pr.actividad).forEach((k) => {
+        const v = Math.max(pr.actividad[k] || 0, al[k] || 0);
+        if (v !== (al[k] || 0)) { al[k] = v; n++; }
+      });
+      if (n) { this.dset('actividad', al); cambios += n; }
+    }
+
+    if (cambios) this.cargarEstado();
+    return cambios;
+  },
+
+  pushSync(ya) {
+    if (typeof SyncTJ === 'undefined' || !SyncTJ.activo) return;
+    if (SyncTJ._enviando) { SyncTJ._pendiente = true; return; }
+    clearTimeout(this._syTimer);
+    const hacer = async () => {
+      SyncTJ._enviando = true;
+      try {
+        SyncTJ.cuenta = this.cuenta;
+        const bancos = this.dget('bancos', []) || [];
+        const ediciones = this.dget('ediciones', {}) || {};
+        const progreso = {
+          historial: this.dget('historial', []) || [],
+          memoria: this.dget('memoria', {}) || {},
+          porPregunta: this.dget('porPregunta', {}) || {},
+          actividad: this.dget('actividad', {}) || {}
+        };
+        const remotos = (await SyncTJ.listarBancos()).map((x) => x.id);
+        await SyncTJ.pushBancos(bancos, remotos);
+        await SyncTJ.pushEstado(ediciones, progreso);
+        this.pintarSyncEstado('Guardado a las ' + new Date().toLocaleTimeString('es-ES'));
+      } catch (e) {
+        console.warn('sync push', e);
+        this.pintarSyncEstado('No se pudo guardar (' + e.message + ')');
+      } finally {
+        SyncTJ._enviando = false;
+        if (SyncTJ._pendiente) { SyncTJ._pendiente = false; this.pushSync(true); }
+      }
+    };
+    if (ya) hacer(); else this._syTimer = setTimeout(hacer, 1500);
+  },
+
   /* ================= gestión de preguntas ================= */
 
   gesFiltro() {
@@ -2413,9 +2591,8 @@ const App = {
             this.esc((p.opciones || {})[l] || '') + '">' +
         '</div>').join('');
 
-      const leyOpts = ['<option value="">(sin ley)</option>']
-        .concat(leyesTodas.map((x) => '<option value="' + this.esc(x) + '"' +
-          (x === ley ? ' selected' : '') + '>' + this.esc(x) + '</option>')).join('');
+      const leyInput = '<input class="ges-ley-input" data-campo="ley" list="ges-leyes-dl" ' +
+        'value="' + this.esc(ley || '') + '" placeholder="Escribe o elige una ley…">';
 
       const bloqueOpts = [
         ['test', 'Test · 1er ejercicio'],
@@ -2436,11 +2613,20 @@ const App = {
         ops +
         '<div class="ges-meta">' +
           '<select data-campo="bloque">' + bloqueOpts + '</select>' +
-          '<select data-campo="ley">' + leyOpts + '</select>' +
+          leyInput +
           '<button class="ges-guardar" type="button">Guardar</button>' +
         '</div>' +
       '</div>';
     }).join('');
+
+    // Sugerencias de ley para el desplegable editable
+    let dl = document.getElementById('ges-leyes-dl');
+    if (!dl) {
+      dl = document.createElement('datalist');
+      dl.id = 'ges-leyes-dl';
+      document.body.appendChild(dl);
+    }
+    dl.innerHTML = leyes.map((x) => '<option value="' + this.esc(x.ley) + '">').join('');
 
     const mas = document.getElementById('ges-mas');
     if (mas) mas.classList.toggle('hidden', lista.length <= f.limite);
@@ -2471,6 +2657,7 @@ const App = {
     });
     item.classList.add('editada');
     this.pintarGestion();
+    this.pushSync();
   },
 
   vaciarPreguntas() {
@@ -2495,6 +2682,7 @@ const App = {
     this.pintarGestion();
     this.pintarInicio();
     this.pintarStats();
+    this.pushSync(true);
     this.toast('Preguntas vaciadas');
   },
 
@@ -2948,6 +3136,7 @@ const App = {
     this.pintarInicio();
     this.pintarStats();
     this.pintarChipsFuente();
+    this.pushSync();
     this.toast('Añadido "' + titulo + '": ' + lista.length + ' preguntas');
   },
 

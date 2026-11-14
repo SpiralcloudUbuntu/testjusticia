@@ -1,12 +1,13 @@
 /* sw.js — Service Worker: cache-first para los assets de la app.
    Sube CACHE_NAME en CADA deploy (incluidos reverts). */
-const CACHE_NAME = 'testjusticia-v19';
+const CACHE_NAME = 'testjusticia-v20';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './db.js',
+  './sync.js',
   './app.js',
   './vendor/pdf.min.js',
   './vendor/pdf.worker.min.js',

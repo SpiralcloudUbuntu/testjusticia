@@ -823,6 +823,11 @@ body.fuente-muygrande .test-item-m,body.fuente-muygrande .card-meta{font-size:.9
   font:inherit;font-size:.78rem;padding:7px 9px;border-radius:8px;
   border:1px solid var(--borde);background:var(--card);color:var(--ink);width:100%;
 }
+.ges-ley-input{
+  font:inherit;font-size:.78rem;padding:7px 9px;border-radius:8px;
+  border:1px solid var(--borde);background:var(--card);color:var(--ink);width:100%;
+}
+.ges-ley-input:focus{outline:none;border-color:var(--azul2)}
 .ges-guardar{
   font:inherit;font-size:.78rem;font-weight:800;padding:8px 14px;border-radius:8px;
   border:0;background:var(--azul2);color:#fff;cursor:pointer;white-space:nowrap;
