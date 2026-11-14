@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -285,6 +285,8 @@ const App = {
     /* --- Gestión de preguntas --- */
     const gpdf = document.getElementById('btn-gestion-pdf');
     if (gpdf) gpdf.addEventListener('click', () => this.abrirImportPDF());
+    const gvac = document.getElementById('btn-vaciar-preguntas');
+    if (gvac) gvac.addEventListener('click', () => this.vaciarPreguntas());
     const gl = document.getElementById('ges-lista');
     if (gl) {
       gl.addEventListener('click', (e) => {
@@ -2378,6 +2380,14 @@ const App = {
         ' con estos filtros · mostrando ' + Math.min(f.limite, lista.length);
     }
 
+    const tot = document.getElementById('ges-total');
+    if (tot) {
+      const imp = this.dget('bancos', []) || [];
+      const nImp = imp.reduce((a, b) => a + ((b.preguntas || []).length), 0);
+      tot.textContent = this.poolGlobal().length + ' preguntas en total · ' +
+        nImp + ' importadas · banco oficial no cargado';
+    }
+
     const ed = this.dget('ediciones', {}) || {};
     const leyesTodas = leyes.map((x) => x.ley);
 
@@ -2461,6 +2471,31 @@ const App = {
     });
     item.classList.add('editada');
     this.pintarGestion();
+  },
+
+  vaciarPreguntas() {
+    const imp = this.dget('bancos', []) || [];
+    const n = imp.reduce((a, b) => a + ((b.preguntas || []).length), 0);
+    const ed = this.dget('ediciones', {}) || {};
+    this.confirmar(
+      'Se quitarán ' + n + ' preguntas importadas y ' + Object.keys(ed).length +
+      ' correcciones. El historial y las estadísticas se conservan.',
+      'Vaciar preguntas',
+      () => this._vaciarPreguntas(),
+      null, 'Vaciar', 'Cancelar'
+    );
+  },
+
+  _vaciarPreguntas() {
+    this.ddel('bancos');
+    this.ddel('ediciones');
+    this._ges = null;
+    this.cargarEstado();
+    this.banco = this.bancos[0] || null;
+    this.pintarGestion();
+    this.pintarInicio();
+    this.pintarStats();
+    this.toast('Preguntas vaciadas');
   },
 
   /* ================= importar PDF ================= */

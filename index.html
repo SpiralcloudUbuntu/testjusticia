@@ -484,7 +484,9 @@
           </div>
           <div class="test-nav">
             <button id="btn-gestion-pdf" class="btn-pri" type="button">Subir PDF</button>
+            <button id="btn-vaciar-preguntas" class="btn-peligro" type="button">Vaciar todas las preguntas</button>
           </div>
+          <div class="cfg-nota" id="ges-total"></div>
         </div>
 
         <div class="card">
@@ -702,7 +704,11 @@
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/tesseract/tesseract.min.js"></script>
 <script src="datos/examenes.js"></script>
-<script src="datos/banco.js"></script>
+<!-- Banco oficial DESACTIVADO a proposito (13/11/2026): la app arranca con 0
+     preguntas para que Carolina empiece a subir las suyas. El fichero sigue en
+     datos/banco.js (1.144 preguntas de 10 examenes oficiales). Para recuperarlo,
+     descomenta esta linea y sube CACHE_NAME en sw.js. -->
+<!-- <script src="datos/banco.js"></script> -->
 <script src="datos/casos.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>

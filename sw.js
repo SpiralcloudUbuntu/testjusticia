@@ -1,6 +1,6 @@
 /* sw.js — Service Worker: cache-first para los assets de la app.
    Sube CACHE_NAME en CADA deploy (incluidos reverts). */
-const CACHE_NAME = 'testjusticia-v18';
+const CACHE_NAME = 'testjusticia-v19';
 
 const ASSETS = [
   './',
@@ -14,7 +14,6 @@ const ASSETS = [
   './vendor/tesseract/worker.min.js',
   './manifest.json',
   './datos/examenes.js',
-  './datos/banco.js',
   './datos/casos.js',
   './icons/icon-192.png',
   './icons/icon-512.png'
