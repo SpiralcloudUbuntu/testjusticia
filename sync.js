@@ -117,6 +117,30 @@ window.SyncTJ = {
     }
   },
 
+  /* ---------- sugerencias (colección fija, independiente del código) ---------- */
+
+  urlSugerencias() {
+    return 'https://firestore.googleapis.com/v1/projects/' + this.PROJ +
+      '/databases/(default)/documents/tj_sugerencias?key=' + this.KEY;
+  },
+
+  async enviarSugerencia(obj) {
+    const r = await fetch(this.urlSugerencias(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { d: { stringValue: JSON.stringify(obj) } } })
+    });
+    if (!r.ok) {
+      let t = '';
+      try { t = await r.text(); } catch (e) {}
+      const err = new Error('Firestore ' + r.status + ': ' + t.slice(0, 140));
+      err.status = r.status;
+      throw err;
+    }
+    const j = await r.json();
+    return String(j.name || '').split('/').pop();
+  },
+
   /* ---------- configuración ---------- */
 
   cargar() {

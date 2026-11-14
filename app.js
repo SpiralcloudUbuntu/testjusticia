@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -58,6 +58,7 @@ const App = {
     this.pintarStats();
     this.pintarMemoria();
     this.pintarListaTests();
+    this.pintarSugerencias();
     this.enganchar();
     this.initSync();
     this.vigilarActualizaciones();
@@ -293,6 +294,9 @@ const App = {
     if (sact) sact.addEventListener('click', () => this.activarSync());
     const sdes = document.getElementById('btn-sy-desactivar');
     if (sdes) sdes.addEventListener('click', () => this.desactivarSync());
+
+    const bSug = document.getElementById('btn-sug-enviar');
+    if (bSug) bSug.addEventListener('click', () => this.enviarSugerencia());
     const gl = document.getElementById('ges-lista');
     if (gl) {
       gl.addEventListener('click', (e) => {
@@ -588,6 +592,7 @@ const App = {
     this.cerrarMenu();
     if (id === 'tab-memoria') this.pintarMemoria();
     if (id === 'tab-gestion') this.pintarGestion();
+    if (id === 'tab-sugerencias') this.pintarSugerencias();
     if (id === 'tab-resultados') this.pintarListaTests();
     if (id === 'tab-test') {
       // La pestaña Test abre SIEMPRE la portada, para elegir como hacerlo.
@@ -2367,7 +2372,7 @@ const App = {
     SyncTJ.guardar(c, true);
     SyncTJ.cuenta = this.cuenta;
     this.pintarSyncEstado('Conectando…');
-    this.pullSync(true).then(() => this.pushSync(true));
+    this.pullSync(true).then(() => { this.pushSync(true); this.reintentarSugerencias(); });
   },
 
   desactivarSync() {
@@ -2501,6 +2506,82 @@ const App = {
     if (ya) hacer(); else this._syTimer = setTimeout(hacer, 1500);
   },
 
+  /* ================= sugerencias ================= */
+
+  enviarSugerencia() {
+    const tipo = (document.getElementById('sug-tipo') || {}).value || 'mejora';
+    const txt = ((document.getElementById('sug-texto') || {}).value || '').trim();
+    if (txt.length < 5) { this.toast('Escribe un poco más'); return; }
+
+    const obj = {
+      tipo: tipo,
+      texto: txt,
+      cuenta: this.cuenta,
+      version: APP_VERSION,
+      fecha: new Date().toISOString(),
+      agente: String(navigator.userAgent || '').slice(0, 120),
+      enviada: false
+    };
+    const lst = this.dget('sugerencias', []) || [];
+    lst.push(obj);
+    this.dset('sugerencias', lst);
+
+    const area = document.getElementById('sug-texto');
+    if (area) area.value = '';
+    this.pintarSugerencias();
+    const est = document.getElementById('sug-estado');
+    if (est) est.textContent = 'Guardada. Enviando…';
+    this.pushSugerencia(obj);
+  },
+
+  async pushSugerencia(obj) {
+    const est = document.getElementById('sug-estado');
+    if (typeof SyncTJ === 'undefined') {
+      if (est) est.textContent = 'Guardada en este dispositivo (sin conexión con el servidor).';
+      return;
+    }
+    try {
+      await SyncTJ.enviarSugerencia(obj);
+      obj.enviada = true;
+      const lst = this.dget('sugerencias', []) || [];
+      const i = lst.indexOf(obj);
+      if (i >= 0) { lst[i] = obj; this.dset('sugerencias', lst); }
+      if (est) est.textContent = 'Enviada. Gracias.';
+      this.toast('Sugerencia enviada');
+      this.pintarSugerencias();
+    } catch (e) {
+      console.warn('sugerencia', e);
+      if (est) est.textContent = 'Guardada aquí, pero no se pudo enviar (' + e.message + ').';
+    }
+  },
+
+  reintentarSugerencias() {
+    const lst = this.dget('sugerencias', []) || [];
+    const pend = lst.filter((s) => !s.enviada);
+    pend.forEach((s) => this.pushSugerencia(s));
+    return pend.length;
+  },
+
+  pintarSugerencias() {
+    const el = document.getElementById('sug-lista');
+    if (!el) return;
+    const lst = (this.dget('sugerencias', []) || []).slice().reverse();
+    if (!lst.length) {
+      el.innerHTML = '<div class="ges-vacio">Todavía no has enviado ninguna.</div>';
+      return;
+    }
+    const tipos = { mejora: 'Mejora', fallo: 'Fallo', contenido: 'Contenido', otro: 'Otro' };
+    el.innerHTML = lst.slice(0, 30).map((s) =>
+      '<div class="ges-item"><div class="ges-cab">' +
+        '<span class="ges-badge">' + this.esc(tipos[s.tipo] || s.tipo) + '</span>' +
+        '<span class="ges-badge">' + this.esc(String(s.fecha || '').slice(0, 16).replace('T', ' ')) + '</span>' +
+        (s.enviada ? '<span class="ges-badge edit">enviada</span>'
+                   : '<span class="ges-badge">pendiente</span>') +
+      '</div>' +
+      '<div style="white-space:pre-wrap;font-size:.85rem;line-height:1.5">' +
+        this.esc(s.texto) + '</div></div>').join('');
+  },
+
   /* ================= gestión de preguntas ================= */
 
   gesFiltro() {
@@ -2515,7 +2596,12 @@ const App = {
     const q = String(f.q || '').toLowerCase().trim();
     return this.poolGlobal().filter((p) => {
       if (f.bloques.length < 3 && f.bloques.indexOf(this.bloqueDe(p)) === -1) return false;
-      if (f.ley !== 'todas' && this.leyDe(p) !== f.ley) return false;
+      if (f.ley === '__sin__') {
+        const l = this.leyDe(p);
+        if (l && l !== 'Otras') return false;
+      } else if (f.ley !== 'todas' && this.leyDe(p) !== f.ley) {
+        return false;
+      }
       if (q) {
         const enun = String(p.enunciado || '').toLowerCase();
         const ops = ['a', 'b', 'c', 'd']
@@ -2542,7 +2628,12 @@ const App = {
     const leyes = this.leyesDisponibles();
     const sel = document.getElementById('ges-ley');
     if (sel) {
-      sel.innerHTML = ['<option value="todas">Todas las leyes</option>']
+      const sinLey = this.poolGlobal().filter((p) => {
+        const l = this.leyDe(p);
+        return !l || l === 'Otras';
+      }).length;
+      sel.innerHTML = ['<option value="todas">Todas las leyes</option>',
+        '<option value="__sin__">(sin ley establecida) · ' + sinLey + '</option>']
         .concat(leyes.map((x) => '<option value="' + this.esc(x.ley) + '">' +
           this.esc(x.ley) + ' (' + x.n + ')</option>')).join('');
       sel.value = f.ley;

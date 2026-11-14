@@ -29,6 +29,7 @@
     <button class="nav-btn" type="button" data-tab="tab-stats"><span class="ic">▤</span> Estadísticas</button>
     <button class="nav-btn" type="button" data-tab="tab-memoria"><span class="ic">★</span> MemorIA</button>
     <button class="nav-btn" type="button" data-tab="tab-gestion"><span class="ic">☰</span> Gestión</button>
+    <button class="nav-btn" type="button" data-tab="tab-sugerencias"><span class="ic">✉</span> Sugerencias</button>
 
     <div class="side-pie">
       <button class="nav-btn js-ajustes" type="button"><span class="ic">⚙</span> Ajustes</button>
@@ -516,6 +517,43 @@
           <div class="test-nav">
             <button id="ges-mas" class="btn-sec hidden" type="button">Ver más</button>
           </div>
+        </div>
+      </section>
+
+      <!-- ================= SUGERENCIAS ================= -->
+      <section id="tab-sugerencias" class="tab-content hidden">
+        <div class="card">
+          <div class="card-label">Sugerencias</div>
+          <div class="card-titulo">¿Algo que mejorar?</div>
+          <div class="card-meta">
+            Cuéntame qué falla o qué echas en falta. Se guarda y lo leo cuando me lo pidas.
+          </div>
+
+          <label class="campo">
+            <span>Tipo</span>
+            <select id="sug-tipo">
+              <option value="mejora">Mejora</option>
+              <option value="fallo">Fallo</option>
+              <option value="contenido">Contenido / pregunta mal</option>
+              <option value="otro">Otro</option>
+            </select>
+          </label>
+
+          <label class="campo">
+            <span>Cuéntamelo</span>
+            <textarea id="sug-texto" class="area-texto" rows="5"
+              placeholder="Ejemplo: cuando subo un PDF de 40 páginas tarda mucho y no veo el progreso."></textarea>
+          </label>
+
+          <div class="test-nav">
+            <button id="btn-sug-enviar" class="btn-pri" type="button">Enviar sugerencia</button>
+          </div>
+          <div class="cfg-nota" id="sug-estado"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Enviadas</div>
+          <div id="sug-lista" class="ges-lista"></div>
         </div>
       </section>
 
