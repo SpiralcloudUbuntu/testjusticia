@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -142,6 +142,8 @@ const App = {
         if (o.correcta) p.correcta = o.correcta;
         if (o.bloque) p.bloque = o.bloque;
         if (o.ley != null) p.ley = o.ley;
+        if (o.base != null) p.base = o.base;
+        if (o.justificacion != null) p.justificacion = o.justificacion;
         n++;
       });
     });
@@ -162,6 +164,8 @@ const App = {
       if (cambios.correcta) p.correcta = cambios.correcta;
       if (cambios.bloque) p.bloque = cambios.bloque;
       if (cambios.ley != null) p.ley = cambios.ley;
+      if (cambios.base != null) p.base = cambios.base;
+      if (cambios.justificacion != null) p.justificacion = cambios.justificacion;
     }
     this.toast('Pregunta guardada');
   },
@@ -226,6 +230,21 @@ const App = {
     document.getElementById('btn-blanco').addEventListener('click', () => this.blanco());
     document.getElementById('btn-revision').addEventListener('click', () => this.toggleRevision());
     document.getElementById('btn-memorizar').addEventListener('click', () => this.memorizarActual());
+
+    const btnEditP = document.getElementById('btn-editar-preg');
+    if (btnEditP) btnEditP.addEventListener('click', () => this.abrirEditorPregunta());
+    const mPreg = document.getElementById('modal-preg');
+    if (mPreg) {
+      mPreg.addEventListener('click', (e) => {
+        if (e.target.id === 'modal-preg') this.cerrarEditorPregunta();
+      });
+      const c1 = document.getElementById('btn-cerrar-preg');
+      if (c1) c1.addEventListener('click', () => this.cerrarEditorPregunta());
+      const c2 = document.getElementById('btn-cancelar-preg');
+      if (c2) c2.addEventListener('click', () => this.cerrarEditorPregunta());
+      const c3 = document.getElementById('btn-guardar-preg');
+      if (c3) c3.addEventListener('click', () => this.guardarEditorPregunta());
+    }
     document.getElementById('btn-memoria-repasar').addEventListener('click', () => this.empezarMemoria());
     this.$$('#memoria-filtros [data-mem]').forEach((b) => {
       b.addEventListener('click', () => this.setMemFiltro(b.dataset.mem));
@@ -320,6 +339,12 @@ const App = {
     const gsel = document.getElementById('ges-ley');
     if (gsel) gsel.addEventListener('change', () => {
       this.gesFiltro().ley = gsel.value;
+      this.gesFiltro().limite = 25;
+      this.pintarGestion();
+    });
+    const gjust = document.getElementById('ges-just');
+    if (gjust) gjust.addEventListener('change', () => {
+      this.gesFiltro().just = gjust.value;
       this.gesFiltro().limite = 25;
       this.pintarGestion();
     });
@@ -1683,6 +1708,76 @@ const App = {
     }
   },
 
+  /* ===== Editor de la pregunta en curso (sin salir del test) ===== */
+
+  abrirEditorPregunta() {
+    const s = this.sesion;
+    if (!s) return;
+    const p = s.preguntas[s.idx];
+    if (!p) return;
+    this._editP = p;
+    const $ = (id) => document.getElementById(id);
+    $('ep-enun').value = p.enunciado || '';
+    ['a', 'b', 'c', 'd'].forEach((l) => {
+      $('ep-op-' + l).value = (p.opciones || {})[l] || '';
+      const r = $('ep-ok-' + l);
+      if (r) r.checked = (p.correcta === l);
+    });
+    $('ep-bloque').value = this.bloqueDe(p) || 'test';
+    $('ep-ley').value = this.leyDe(p) || '';
+    $('ep-base').value = p.base || '';
+    $('ep-just').value = p.justificacion || '';
+    const dl = document.getElementById('ep-leyes-dl');
+    if (dl) {
+      dl.innerHTML = this.leyesDisponibles()
+        .map((x) => '<option value="' + this.esc(x.ley) + '">').join('');
+    }
+    $('modal-preg').classList.remove('hidden');
+  },
+
+  cerrarEditorPregunta() {
+    const m = document.getElementById('modal-preg');
+    if (m) m.classList.add('hidden');
+    this._editP = null;
+  },
+
+  guardarEditorPregunta() {
+    const p = this._editP;
+    if (!p) return;
+    const $ = (id) => document.getElementById(id);
+    const enunciado = ($('ep-enun').value || '').trim();
+    const opciones = {};
+    ['a', 'b', 'c', 'd'].forEach((l) => {
+      opciones[l] = ($('ep-op-' + l).value || '').trim();
+    });
+    const r = document.querySelector('#modal-preg input[type=radio]:checked');
+    const correcta = r ? r.value : '';
+
+    if (!enunciado) { this.toast('El enunciado no puede estar vacío'); return; }
+    if (!correcta) { this.toast('Marca cuál es la opción correcta'); return; }
+    if (!opciones[correcta]) { this.toast('La opción marcada como correcta está vacía'); return; }
+
+    const cambios = {
+      enunciado: enunciado,
+      opciones: opciones,
+      correcta: correcta,
+      bloque: $('ep-bloque').value || 'test',
+      ley: ($('ep-ley').value || '').trim(),
+      base: ($('ep-base').value || '').trim(),
+      justificacion: ($('ep-just').value || '').trim()
+    };
+
+    if (p._banco) this.guardarEdicion(p._banco, p.n, cambios);
+    /* La sesion trabaja sobre COPIAS de la pregunta: si no se aplican aqui,
+       se guarda en la DB pero la pantalla sigue mostrando lo viejo. */
+    Object.assign(p, cambios);
+
+    this.cerrarEditorPregunta();
+    this.pintarPregunta();
+    this.pushSync();
+    this.toast('Pregunta actualizada');
+  },
+
   pintarJustificacion(p) {
     const j = document.getElementById('justificacion');
     if (!j) return;
@@ -2586,7 +2681,7 @@ const App = {
 
   gesFiltro() {
     if (!this._ges) {
-      this._ges = { bloques: ['test', 'caso', 'informatica'], ley: 'todas', q: '', limite: 25 };
+      this._ges = { bloques: ['test', 'caso', 'informatica'], ley: 'todas', just: 'todas', q: '', limite: 25 };
     }
     return this._ges;
   },
@@ -2602,6 +2697,9 @@ const App = {
       } else if (f.ley !== 'todas' && this.leyDe(p) !== f.ley) {
         return false;
       }
+      const conJust = !!String(p.justificacion || '').trim();
+      if (f.just === '__sin__' && conJust) return false;
+      if (f.just === '__con__' && !conJust) return false;
       if (q) {
         const enun = String(p.enunciado || '').toLowerCase();
         const ops = ['a', 'b', 'c', 'd']
@@ -2637,6 +2735,18 @@ const App = {
         .concat(leyes.map((x) => '<option value="' + this.esc(x.ley) + '">' +
           this.esc(x.ley) + ' (' + x.n + ')</option>')).join('');
       sel.value = f.ley;
+    }
+
+    const selJ = document.getElementById('ges-just');
+    if (selJ) {
+      const pool = this.poolGlobal();
+      const nSin = pool.filter((p) => !String(p.justificacion || '').trim()).length;
+      selJ.innerHTML = [
+        '<option value="todas">Todas (' + pool.length + ')</option>',
+        '<option value="__sin__">(sin justificar) · ' + nSin + '</option>',
+        '<option value="__con__">Justificadas · ' + (pool.length - nSin) + '</option>'
+      ].join('');
+      selJ.value = f.just || 'todas';
     }
 
     const bus = document.getElementById('ges-buscar');
@@ -2692,16 +2802,26 @@ const App = {
       ].map((par) => '<option value="' + par[0] + '"' +
         (this.bloqueDe(p) === par[0] ? ' selected' : '') + '>' + par[1] + '</option>').join('');
 
+      const tieneJust = !!String(p.justificacion || '').trim();
       return '<div class="ges-item' + (esEdit ? ' editada' : '') +
         '" data-banco="' + this.esc(banco) + '" data-n="' + p.n + '">' +
         '<div class="ges-cab">' +
           '<span class="ges-badge">' + this.esc(this.nombreBanco(banco)) + ' · nº ' + p.n + '</span>' +
           '<span class="ges-badge">' + this.esc(this.txtBloqueP(p)) + '</span>' +
           '<span class="ges-badge">' + this.esc(ley || 'sin ley') + '</span>' +
+          (tieneJust ? '<span class="ges-badge just-ok">justificada</span>'
+                     : '<span class="ges-badge just-pend">sin justificar</span>') +
           (esEdit ? '<span class="ges-badge edit">editada</span>' : '') +
         '</div>' +
         '<textarea class="ges-enun" data-campo="enunciado">' + this.esc(p.enunciado) + '</textarea>' +
         ops +
+        '<div class="ges-just">' +
+          '<input class="ges-base" data-campo="base" list="ges-leyes-dl" value="' +
+            this.esc(p.base || '') + '" placeholder="Base legal · art. 34.1 Ley 15/2015">' +
+          '<textarea class="ges-jtxt" data-campo="justificacion" ' +
+            'placeholder="Por qué esta opción es la correcta y por qué fallan las otras…">' +
+            this.esc(p.justificacion || '') + '</textarea>' +
+        '</div>' +
         '<div class="ges-meta">' +
           '<select data-campo="bloque">' + bloqueOpts + '</select>' +
           leyInput +
@@ -2734,6 +2854,8 @@ const App = {
     const correcta = radio ? radio.value : '';
     const bloque = (item.querySelector('[data-campo="bloque"]') || {}).value || '';
     const ley = (item.querySelector('[data-campo="ley"]') || {}).value || '';
+    const base = (item.querySelector('[data-campo="base"]') || {}).value || '';
+    const justificacion = (item.querySelector('[data-campo="justificacion"]') || {}).value || '';
 
     if (!enunciado) { this.toast('El enunciado no puede estar vacío'); return; }
     if (!correcta) { this.toast('Marca cuál es la opción correcta'); return; }
@@ -2744,7 +2866,9 @@ const App = {
       opciones: opciones,
       correcta: correcta,
       bloque: bloque,
-      ley: ley
+      ley: ley,
+      base: base.trim(),
+      justificacion: justificacion.trim()
     });
     item.classList.add('editada');
     this.pintarGestion();

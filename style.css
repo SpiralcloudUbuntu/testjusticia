@@ -871,3 +871,30 @@ body.dark .caso-texto{color:#cbd5e1}
 .caso-rev{margin-bottom:12px;border:1px solid var(--borde);border-radius:var(--radio);background:var(--bg)}
 .caso-rev summary{padding:10px 13px;cursor:pointer;font-weight:800;font-size:.8rem;color:var(--azul2)}
 .caso-rev div{padding:0 14px 14px;font-size:.83rem;line-height:1.6;white-space:pre-wrap;max-height:40vh;overflow-y:auto}
+
+/* ===================== JUSTIFICACIONES Y EDITOR (v22) ===================== */
+.ges-just{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.ges-base{
+  padding:9px 11px;border:1px solid var(--borde);border-radius:var(--radio);
+  background:var(--bg);font:inherit;font-size:.82rem;color:var(--ink);
+}
+.ges-jtxt{
+  padding:9px 11px;border:1px solid var(--borde);border-radius:var(--radio);
+  background:var(--bg);font:inherit;font-size:.82rem;color:var(--ink);
+  line-height:1.55;min-height:64px;resize:vertical;
+}
+.ges-base:focus,.ges-jtxt:focus{outline:2px solid var(--azul2);outline-offset:0}
+.ges-badge.just-ok{background:#dcfce7;border-color:#86efac;color:#166534}
+.ges-badge.just-pend{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+body.dark .ges-badge.just-ok{background:#14532d;border-color:#166534;color:#bbf7d0}
+body.dark .ges-badge.just-pend{background:#78350f;border-color:#92400e;color:#fde68a}
+
+/* Editor de la pregunta en curso, sin salir del test */
+.ep-ops{display:flex;flex-direction:column;gap:8px}
+.ep-op{display:flex;flex-direction:column;gap:4px}
+.ep-op > span{display:flex;align-items:center;gap:8px;font-weight:800;font-size:.78rem}
+.ep-op input[type=text]{
+  padding:8px 10px;border:1px solid var(--borde);border-radius:var(--radio);
+  background:var(--bg);font:inherit;font-size:.84rem;color:var(--ink);
+}
+#modal-preg .modal-caja{max-height:92vh;overflow-y:auto}

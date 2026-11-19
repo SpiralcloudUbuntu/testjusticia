@@ -360,6 +360,7 @@
 
         <div class="test-nav">
           <button id="btn-anterior" class="btn-sec" type="button">‹ Anterior</button>
+          <button id="btn-editar-preg" class="btn-sec" type="button" title="Editar esta pregunta y su justificación">✎ Editar</button>
           <button id="btn-blanco" class="btn-blanco" type="button">Dejar en blanco</button>
           <button id="btn-siguiente" class="btn-pri" type="button">Siguiente ›</button>
         </div>
@@ -503,6 +504,10 @@
           <div class="sub-cfg">
             <span class="sub-tit">Ley</span>
             <select id="ges-ley" class="campo-select"></select>
+          </div>
+          <div class="sub-cfg">
+            <span class="sub-tit">Justificación</span>
+            <select id="ges-just" class="campo-select"></select>
           </div>
           <div class="sub-cfg">
             <span class="sub-tit">Buscar en el enunciado</span>
@@ -749,6 +754,54 @@
       <div class="modal-acciones">
         <button id="btn-texto-pdf-procesar" class="btn-pri" type="button">Procesar texto</button>
         <button id="btn-texto-pdf-cancelar" class="btn-sec" type="button">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: editar la pregunta en curso sin salir del test -->
+<div id="modal-preg" class="modal hidden">
+  <div class="modal-caja">
+    <div class="modal-cab">
+      <span>Editar pregunta</span>
+      <button id="btn-cerrar-preg" class="icon-btn" type="button">Cerrar</button>
+    </div>
+    <div class="modal-cuerpo">
+      <label class="campo">
+        <span>Enunciado</span>
+        <textarea id="ep-enun" class="area-texto" rows="4"></textarea>
+      </label>
+      <div class="ep-ops">
+        <label class="campo ep-op"><span><input type="radio" name="ep-ok" id="ep-ok-a" value="a"> A</span><input type="text" id="ep-op-a"></label>
+        <label class="campo ep-op"><span><input type="radio" name="ep-ok" id="ep-ok-b" value="b"> B</span><input type="text" id="ep-op-b"></label>
+        <label class="campo ep-op"><span><input type="radio" name="ep-ok" id="ep-ok-c" value="c"> C</span><input type="text" id="ep-op-c"></label>
+        <label class="campo ep-op"><span><input type="radio" name="ep-ok" id="ep-ok-d" value="d"> D</span><input type="text" id="ep-op-d"></label>
+      </div>
+      <label class="campo">
+        <span>Bloque</span>
+        <select id="ep-bloque">
+          <option value="test">Test · 1er ejercicio</option>
+          <option value="caso">Caso práctico · 2º</option>
+          <option value="informatica">Informática · 3º</option>
+        </select>
+      </label>
+      <label class="campo">
+        <span>Ley</span>
+        <input type="text" id="ep-ley" list="ep-leyes-dl" placeholder="Escribe o elige una ley…">
+        <datalist id="ep-leyes-dl"></datalist>
+      </label>
+      <label class="campo">
+        <span>Base legal</span>
+        <input type="text" id="ep-base" placeholder="Art. 34.1 Ley 15/2015">
+      </label>
+      <label class="campo">
+        <span>Justificación</span>
+        <textarea id="ep-just" class="area-texto" rows="4"
+          placeholder="Por qué esta opción es la correcta y por qué fallan las otras…"></textarea>
+      </label>
+      <div class="modal-acciones">
+        <button id="btn-guardar-preg" class="btn-pri" type="button">Guardar y seguir</button>
+        <button id="btn-cancelar-preg" class="btn-sec" type="button">Cancelar</button>
       </div>
     </div>
   </div>
