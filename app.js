@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -231,6 +231,8 @@ const App = {
     document.getElementById('btn-revision').addEventListener('click', () => this.toggleRevision());
     document.getElementById('btn-memorizar').addEventListener('click', () => this.memorizarActual());
 
+    const btnPausar = document.getElementById('btn-pausar');
+    if (btnPausar) btnPausar.addEventListener('click', () => this.pausarYsalir());
     const btnEditP = document.getElementById('btn-editar-preg');
     if (btnEditP) btnEditP.addEventListener('click', () => this.abrirEditorPregunta());
     const mPreg = document.getElementById('modal-preg');
@@ -638,6 +640,12 @@ const App = {
   pausarSesion() {
     const s = this.sesion;
     if (!s) return;
+    /* Congela el reloj: el tiempo que queda viaja con la sesion guardada. */
+    if (s.minutos > 0 && this._cronoFin > 0) {
+      s._restanteMs = Math.max(0, this._cronoFin - Date.now());
+    } else if (!s.minutos && s.inicio) {
+      s._transcurridoMs = Math.max(0, Date.now() - s.inicio);
+    }
     s._pausada = true;
     s._guardada = new Date().toISOString();
     s._id = s._id || ('ses-' + Date.now());
@@ -649,6 +657,18 @@ const App = {
     clearInterval(this._timer);
     this.sesion = null;
     this.toast('Test guardado. Lo tienes en Resultados.');
+  },
+
+  txtRestante(s) {
+    if (!s || s._restanteMs == null) return '';
+    return ' · te quedaban ' + this.mmss(Math.max(0, Math.round(s._restanteMs / 1000)));
+  },
+
+  pausarYsalir() {
+    if (!this.sesion) return;
+    this.pausarSesion();
+    this._mostrarTab('tab-inicio');
+    this.pintarInicio();
   },
 
   continuarPausada(id) {
@@ -705,7 +725,8 @@ const App = {
             '<div class="test-item-cab"><span class="test-badge abierto">A medias</span>' +
             '<span class="test-item-fecha">' + this.fechaCorta(s._guardada) + '</span></div>' +
             '<div class="test-item-t">' + this.esc(s.titulo || 'Test') + '</div>' +
-            '<div class="test-item-m">' + hechas + ' de ' + total + ' respondidas · ' + pct + '%</div>' +
+            '<div class="test-item-m">' + hechas + ' de ' + total + ' respondidas · ' + pct + '%' +
+              this.txtRestante(s) + '</div>' +
             '<div class="progress" style="margin:8px 0"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
             '<div class="test-nav" style="margin-top:6px">' +
               '<button class="btn-pri" type="button" data-inicio-continuar="' + this.esc(s._id) + '">Continuar</button>' +
@@ -993,6 +1014,33 @@ const App = {
     if (d) d.textContent = exs.length + (exs.length === 1 ? ' examen disponible' : ' exámenes disponibles');
     const f = document.getElementById('desc-fallos2');
     if (f) f.textContent = this.fallosDeBanco().length + ' pendientes';
+
+    /* Test a medias a la vista, sin bajar a Inicio ni a Resultados. */
+    const av = document.getElementById('portada-pausada');
+    if (av) {
+      const pausadas = (this.dget('pausadas', []) || []).slice()
+        .sort((a, b) => String(b._guardada || '').localeCompare(String(a._guardada || '')));
+      if (!pausadas.length) {
+        av.innerHTML = '';
+        av.classList.add('hidden');
+      } else {
+        const s = pausadas[0];
+        const hechas = Object.keys(s.respuestas || {}).length;
+        const total = (s.preguntas || []).length;
+        av.classList.remove('hidden');
+        av.innerHTML = '<div class="test-item abierto">' +
+          '<div class="test-item-cab"><span class="test-badge abierto">A medias</span>' +
+          '<span class="test-item-fecha">' + this.fechaCorta(s._guardada) + '</span></div>' +
+          '<div class="test-item-t">' + this.esc(s.titulo || 'Test') + '</div>' +
+          '<div class="test-item-m">' + hechas + ' de ' + total + ' respondidas' +
+            this.txtRestante(s) + '</div>' +
+          '<div class="test-nav" style="margin-top:6px">' +
+            '<button class="btn-pri" type="button" id="portada-continuar">Continuar</button>' +
+          '</div></div>';
+        const b = document.getElementById('portada-continuar');
+        if (b) b.addEventListener('click', () => this.continuarPausada(s._id));
+      }
+    }
   },
 
   /* ================= exámenes oficiales ================= */
@@ -1540,10 +1588,22 @@ const App = {
     const el = document.getElementById('test-cronometro');
     if (s.minutos > 0) {
       el.classList.remove('hidden');
-      this._cronoFin = s.inicio + s.minutos * 60000;
+      /* Si viene de una pausa, el reloj retoma con el tiempo que quedaba.
+         Sin esto, continuar al dia siguiente entrega el test automaticamente. */
+      if (s._restanteMs != null) {
+        this._cronoFin = Date.now() + s._restanteMs;
+        delete s._restanteMs;
+      } else {
+        this._cronoFin = s.inicio + s.minutos * 60000;
+      }
     } else {
       el.classList.remove('hidden'); // en simulacro sin límite seguimos mostrando tiempo transcurrido
       this._cronoFin = 0;
+      /* Sin límite: el cronometro sigue contando desde donde se quedo. */
+      if (s._transcurridoMs != null) {
+        s.inicio = Date.now() - s._transcurridoMs;
+        delete s._transcurridoMs;
+      }
     }
     this._timer = setInterval(() => {
       if (!this.sesion) return;
@@ -1908,8 +1968,8 @@ const App = {
 
   abandonar() {
     this.confirmar(
-      '¿Salir sin guardar este test? No contará en tus estadísticas.',
-      'Salir sin guardar',
+      '¿Descartar este test? Se perderá lo respondido y no contará en tus estadísticas.',
+      'Descartar test',
       () => {
         clearInterval(this._timer);
         this.sesion = null;
@@ -1918,7 +1978,7 @@ const App = {
         this.pintarInicio();
       },
       null,
-      'Salir sin guardar',
+      'Descartar',
       'Seguir en el test'
     );
   },
