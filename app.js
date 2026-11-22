@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -475,6 +475,14 @@ const App = {
 
     const cfgGo = document.getElementById('cfg-empezar');
     if (cfgGo) cfgGo.addEventListener('click', () => this.empezarConfig());
+    this.$$('#cfg-penal [data-penal]').forEach((b) => b.addEventListener('click', () => {
+      this.setCfg('penal', parseFloat(b.dataset.penal) || 0);
+    }));
+    this.$$('#ex-penal [data-penal]').forEach((b) => b.addEventListener('click', () => {
+      if (!this.exCfg) return;
+      this.exCfg.penal = parseFloat(b.dataset.penal) || 0;
+      this.pintarExamenCfg();
+    }));
 
     /* --- examen oficial --- */
     this.$$('[data-ex-min]').forEach((b) => b.addEventListener('click', () => {
@@ -1123,7 +1131,11 @@ const App = {
   abrirExamen(id) {
     const ex = this.examenes().find((x) => x.id === id);
     if (!ex) return;
-    this.exCfg = { id, min: (this.cfg && this.cfg.min) || 0 };
+    this.exCfg = {
+      id: id,
+      min: (this.cfg && this.cfg.min) || 0,
+      penal: (this.cfg && this.cfg.penal != null) ? this.cfg.penal : (this.ajustes.penal || 0)
+    };
     this.vistaTest('examen');
   },
 
@@ -1137,6 +1149,12 @@ const App = {
       (ex.nota ? '<br>' + this.esc(ex.nota) : '') +
       (ex.minutos ? '<br>Tiempo oficial: <strong>' + ex.minutos + ' min</strong>'
                   : '<br>Tiempo oficial: <em>no confirmado en las bases</em> — elige tu');
+
+    if ((this.exCfg || {}).penal == null) {
+      this.exCfg.penal = (this.cfg && this.cfg.penal != null)
+        ? this.cfg.penal : (this.ajustes.penal || 0);
+    }
+    this.pintarChipsPenal('ex-penal', this.exCfg.penal);
 
     const est = !!this.ajustes.correccionInmediata;
     const min = est ? 0 : ((this.exCfg && this.exCfg.min) || 0);
@@ -1154,20 +1172,31 @@ const App = {
     document.getElementById('ex-resumen').innerHTML =
       '<b>' + ex.n + '</b> preguntas · ' +
       (est ? 'modo estudio, <strong>sin tiempo</strong>' : (min > 0 ? '<strong>' + min + ' min</strong>' : 'sin límite')) +
-      ' · ' + this.txtPenal();
+      ' · ' + this.txtPenal(this.exCfg.penal);
   },
 
-  txtPenal() {
-    const p = this.ajustes.penal || 0;
+  txtPenal(valor) {
+    const p = (valor == null) ? (this.ajustes.penal || 0) : valor;
     if (!p) return 'sin penalización';
     const r = Math.round(1 / p);
-    return r > 1 ? r + ' fallos = 1 acierto' : 'penalización 1:1';
+    return r <= 1 ? '1 fallo resta 1 acierto' : r + ' fallos restan 1 acierto';
+  },
+
+  pintarChipsPenal(id, valor) {
+    const v = valor || 0;
+    this.$$('#' + id + ' [data-penal]').forEach((b) => {
+      b.classList.toggle('on', Math.abs(parseFloat(b.dataset.penal) - v) < 0.002);
+    });
   },
 
   empezarExamen() {
     const ex = this.examenes().find((x) => x.id === ((this.exCfg || {}).id));
     if (!ex) return;
-    this.empezar('oficial', { examenId: ex.id, min: (this.exCfg || {}).min || 0 });
+    this.empezar('oficial', {
+      examenId: ex.id,
+      min: (this.exCfg || {}).min || 0,
+      penal: (this.exCfg || {}).penal
+    });
   },
 
   /* ================= configurador de test ================= */
@@ -1315,6 +1344,8 @@ const App = {
     this.cfg.tipo = this.cfg.tipo || 'todas';
     this.cfg.examen = this.cfg.examen || 'todos';
     this.cfg.ley = this.cfg.ley || 'todas';
+    if (this.cfg.penal == null) this.cfg.penal = this.ajustes.penal || 0;
+    this.pintarChipsPenal('cfg-penal', this.cfg.penal);
 
     const est = !!this.ajustes.correccionInmediata;
     const max = this.contarConjunto(this.cfg.tipo) || 0;
@@ -1378,7 +1409,8 @@ const App = {
         ? '<b>' + nEf + '</b> pregunta' + (nEf === 1 ? '' : 's') + ' · ' +
           (est ? 'estudio, <strong>sin tiempo</strong>' : (min > 0 ? '<strong>' + min + ' min</strong>' : 'sin límite')) +
           ' · ' + this.txtFuente() + ' · ' + this.txtBloque() + ' · ' + this.txtTipo() +
-          (this.cfg.ley && this.cfg.ley !== 'todas' ? ' · ' + this.txtLey() : '')
+          (this.cfg.ley && this.cfg.ley !== 'todas' ? ' · ' + this.txtLey() : '') +
+          ' · ' + this.txtPenal(this.cfg.penal)
         : 'No hay preguntas disponibles con esa combinación.';
     }
     const go = document.getElementById('cfg-empezar');
@@ -1405,7 +1437,7 @@ const App = {
   },
 
   empezarConfig() {
-    this.empezar('config', {});
+    this.empezar('config', { penal: (this.cfg || {}).penal });
   },
 
   /* ================= recuento por pregunta ================= */
@@ -1563,7 +1595,7 @@ const App = {
       inicio: Date.now(),
       fin: null,
       minutos,
-      penal: this.ajustes.penal,
+      penal: (opts.penal != null ? opts.penal : this.ajustes.penal),
       correccionInmediata: est,
       tiempo: 0
     };
@@ -2102,7 +2134,7 @@ const App = {
       document.getElementById('resultado-detalle').innerHTML =
         'Acierto: <strong>' + res.pct + '%</strong> · Tiempo: ' + this.mmss(res.tiempo) +
         '<br>Nota orientativa sobre 10' + (this._ultimaSesion && this._ultimaSesion.penal > 0
-          ? ' (con penalización de ' + this._ultimaSesion.penal + ' por fallo)' : ' (sin penalización)') + '.';
+          ? ' (' + this.txtPenal(this._ultimaSesion.penal) + ')' : ' (sin penalización)') + '.';
 
       // Mensaje de racha: compara esta nota con la media de las anteriores.
       const rachaEl = document.getElementById('resultado-racha');
