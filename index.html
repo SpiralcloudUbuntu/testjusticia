@@ -406,6 +406,7 @@
 
       <!-- ================= RESULTADOS ================= -->
       <section id="tab-resultados" class="tab-content hidden">
+        <div id="res-lista">
         <div class="card resultado-card">
           <div id="resultado-nota" class="nota">—</div>
           <div id="resultado-titulo" class="card-titulo">Resultado</div>
@@ -415,6 +416,9 @@
             <span class="afb-ok" id="res-afb-ok" style="width:0%"></span>
             <span class="afb-mal" id="res-afb-mal" style="width:0%"></span>
             <span class="afb-bl" id="res-afb-bl" style="width:100%"></span>
+          </div>
+          <div class="test-nav" style="margin-top:10px">
+            <button id="btn-ver-completo" class="btn-pri" type="button">Ver el test completo</button>
           </div>
         </div>
 
@@ -448,6 +452,40 @@
         <div class="test-nav">
           <button id="btn-repetir-fallos" class="btn-pri" type="button">↺ Repetir los fallos</button>
           <button id="btn-volver-inicio" class="btn-sec" type="button">Volver al inicio</button>
+        </div>
+        </div><!-- /res-lista -->
+
+        <!-- ---------- VISOR: recorrer un test ya hecho ---------- -->
+        <div id="visor-rev" class="hidden">
+          <div class="card visor-cab">
+            <div class="visor-top">
+              <button class="btn-sec btn-volver" id="visor-cerrar" type="button">‹ Volver</button>
+              <div class="visor-tx">
+                <b id="visor-titulo">Test</b>
+                <span id="visor-meta">—</span>
+              </div>
+              <div class="visor-nota" id="visor-nota">—</div>
+            </div>
+            <div class="visor-filtros" id="visor-filtros">
+              <button class="vf ok" type="button" data-vf="ok">
+                <b id="vf-ok">0</b><span>Buenas</span>
+              </button>
+              <button class="vf mal" type="button" data-vf="mal">
+                <b id="vf-mal">0</b><span>Falladas</span>
+              </button>
+              <button class="vf bl" type="button" data-vf="bl">
+                <b id="vf-bl">0</b><span>En blanco</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card" id="visor-cuerpo"></div>
+
+          <div class="test-nav visor-nav">
+            <button class="btn-sec" id="visor-ant" type="button">‹ Anterior</button>
+            <span class="visor-pos" id="visor-pos">0 / 0</span>
+            <button class="btn-pri" id="visor-sig" type="button">Siguiente ›</button>
+          </div>
         </div>
       </section>
 

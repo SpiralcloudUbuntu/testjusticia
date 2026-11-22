@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -277,6 +277,17 @@ const App = {
     document.getElementById('btn-abandonar').addEventListener('click', () => this.abandonar());
     document.getElementById('btn-repetir-fallos').addEventListener('click', () => this.empezar('fallos-sesion'));
     document.getElementById('btn-volver-inicio').addEventListener('click', () => this.mostrarTab('tab-inicio'));
+
+    const bVerTodo = document.getElementById('btn-ver-completo');
+    if (bVerTodo) bVerTodo.addEventListener('click', () => this.abrirVisor(null));
+    const vCerrar = document.getElementById('visor-cerrar');
+    if (vCerrar) vCerrar.addEventListener('click', () => this.cerrarVisor());
+    this.$$('#visor-filtros [data-vf]').forEach((b) =>
+      b.addEventListener('click', () => this.setFiltroVisor(b.dataset.vf)));
+    const vAnt = document.getElementById('visor-ant');
+    if (vAnt) vAnt.addEventListener('click', () => this.moverVisor(-1));
+    const vSig = document.getElementById('visor-sig');
+    if (vSig) vSig.addEventListener('click', () => this.moverVisor(1));
 
     document.getElementById('btn-exportar').addEventListener('click', () => this.exportar());
     document.getElementById('btn-importar').addEventListener('click', () => document.getElementById('file-import').click());
@@ -2087,8 +2098,20 @@ const App = {
       .filter((p, i) => s.respuestas[i] && s.respuestas[i] !== p.correcta)
       .map((p) => this.clave(p));
 
+    /* Detalle para revisar el test entero despues: clave + respuesta.
+       No se guarda el enunciado (se resuelve contra el banco actual): asi el
+       historial no se come el localStorage. */
+    res.preguntas = s.preguntas.map((p, i) => ({
+      c: this.clave(p),
+      r: s.respuestas[i] || ''
+    }));
+
     this.historial.push(res);
     if (this.historial.length > 300) this.historial = this.historial.slice(-300);
+    /* Solo los 60 ultimos conservan el detalle. */
+    this.historial.forEach((r, i) => {
+      if (i < this.historial.length - 60) delete r.preguntas;
+    });
 
     this.dset('historial', this.historial);
     this.dset('porPregunta', this.porPregunta);
@@ -2235,7 +2258,8 @@ const App = {
       titulo: r.titulo || '',
       ok: r.ok || 0, mal: r.mal || 0, blanco: r.blanco || 0,
       total: r.total || 0, nota: r.nota, pct: r.pct || 0,
-      fallosClaves: r.fallosClaves || []
+      fallosClaves: r.fallosClaves || [],
+      tieneDetalle: !!(r.preguntas && r.preguntas.length)
     }));
 
     const f = this._histFiltro || 'todos';
@@ -2281,9 +2305,17 @@ const App = {
         '<div class="test-item-t">' + this.esc(nombre) + '</div>' +
         '<div class="test-item-m">' + x.ok + ' aciertos · ' + x.mal + ' fallos · ' + x.blanco +
           ' en blanco · ' + x.pct + '%</div>' +
-        (nFallos
-          ? '<div class="test-nav" style="margin-top:6px"><button class="btn-pri" type="button" data-repasar="' +
-            this.esc(x.fecha) + '">Repasar falladas (' + nFallos + ')</button></div>'
+        ((x.tieneDetalle || nFallos)
+          ? '<div class="test-nav" style="margin-top:6px">' +
+              (x.tieneDetalle
+                ? '<button class="btn-sec" type="button" data-ver="' + this.esc(x.fecha) +
+                  '">Ver preguntas</button>'
+                : '') +
+              (nFallos
+                ? '<button class="btn-pri" type="button" data-repasar="' + this.esc(x.fecha) +
+                  '">Repasar falladas (' + nFallos + ')</button>'
+                : '') +
+            '</div>'
           : '<div class="test-item-m" style="opacity:.6;margin-top:5px">Sin fallos que repasar</div>') +
         '</div>';
     }).join('');
@@ -2294,6 +2326,8 @@ const App = {
       b.addEventListener('click', () => this.descartarPausada(b.dataset.descartar)));
     el.querySelectorAll('[data-repasar]').forEach((b) =>
       b.addEventListener('click', () => this.repasarFalladasDe(b.dataset.repasar)));
+    el.querySelectorAll('[data-ver]').forEach((b) =>
+      b.addEventListener('click', () => this.abrirVisor(b.dataset.ver)));
   },
 
   repasarFalladasDe(fecha) {
@@ -2336,6 +2370,168 @@ const App = {
     this.arrancarCrono();
     this.pintarPregunta();
     this.mostrarTab('tab-test');
+  },
+
+  /* ================= visor de un test ya hecho =================
+     Permite recorrer el test pregunta a pregunta, con lo contestado,
+     la correcta y la justificacion, filtrando por acierto/fallo/blanco. */
+
+  mapaClaves() {
+    const m = {};
+    this.poolGlobal().forEach((p) => { m[this.clave(p)] = p; });
+    return m;
+  },
+
+  estadoVisor(x) {
+    if (!x || !x.r) return 'bl';
+    return (x.p && x.r === x.p.correcta) ? 'ok' : 'mal';
+  },
+
+  abrirVisor(fecha) {
+    let res = null;
+    if (fecha) res = (this.historial || []).find((r) => r.fecha === fecha);
+    else res = this._ultimoRes;
+    if (!res) { this.toast('No encuentro ese test'); return; }
+    if (!res.preguntas || !res.preguntas.length) {
+      this.toast('Ese test es anterior a la v26 y no guardó el detalle');
+      return;
+    }
+    const mapa = this.mapaClaves();
+    this._visor = {
+      res: res,
+      filtro: 'todas',
+      idx: 0,
+      items: res.preguntas.map((x) => ({ p: mapa[x.c] || null, c: x.c, r: x.r || '' }))
+    };
+    const lista = document.getElementById('res-lista');
+    const vis = document.getElementById('visor-rev');
+    if (lista) lista.classList.add('hidden');
+    if (vis) vis.classList.remove('hidden');
+    this.pintarVisor();
+    window.scrollTo({ top: 0 });
+  },
+
+  cerrarVisor() {
+    this._visor = null;
+    const lista = document.getElementById('res-lista');
+    const vis = document.getElementById('visor-rev');
+    if (vis) vis.classList.add('hidden');
+    if (lista) lista.classList.remove('hidden');
+    window.scrollTo({ top: 0 });
+  },
+
+  filtroVisor() {
+    const v = this._visor;
+    if (!v) return [];
+    return v.items.filter((x) => {
+      const e = this.estadoVisor(x);
+      if (v.filtro === 'ok') return e === 'ok';
+      if (v.filtro === 'mal') return e === 'mal';
+      if (v.filtro === 'bl') return e === 'bl';
+      return true;
+    });
+  },
+
+  setFiltroVisor(f) {
+    if (!this._visor) return;
+    this._visor.filtro = f || 'todas';
+    this._visor.idx = 0;
+    this.pintarVisor();
+  },
+
+  moverVisor(d) {
+    if (!this._visor) return;
+    const lista = this.filtroVisor();
+    const i = this._visor.idx + d;
+    if (i < 0 || i >= lista.length) return;
+    this._visor.idx = i;
+    this.pintarVisor();
+  },
+
+  htmlPreguntaVisor(x) {
+    const p = x.p;
+    if (!p) {
+      return '<div class="rev-vacio">Esta pregunta ya no está en el banco actual, ' +
+        'así que no se puede mostrar. La respuesta guardada fue: ' +
+        this.esc(x.r ? x.r.toUpperCase() : 'en blanco') + '.</div>';
+    }
+    const est = this.estadoVisor(x);
+    const cls = est === 'ok' ? 'ok' : (est === 'mal' ? 'mal' : 'bl');
+    const txt = est === 'ok' ? 'Correcta' : (est === 'mal' ? 'Fallada' : 'En blanco');
+
+    let ops = '';
+    ['a', 'b', 'c', 'd'].forEach((l) => {
+      const esOk = l === p.correcta;
+      const esTu = l === x.r;
+      let c = 'vo-op';
+      if (esOk) c += ' ok';
+      else if (esTu) c += ' mal';
+      ops += '<div class="' + c + '"><span class="letra">' + l + '</span>' +
+        '<span class="texto">' + this.esc((p.opciones || {})[l] || '') + '</span>' +
+        (esTu && !esOk ? '<span class="vo-tu">tu respuesta</span>' : '') +
+        '<span class="vo-marca">' + (esOk ? '✓' : (esTu ? '✗' : '')) + '</span></div>';
+    });
+
+    return '<div class="visor-preg ' + cls + '">' +
+      '<div class="visor-preg-cab">' +
+        '<span class="rev-num">' + (p.n != null ? p.n : '') + '</span>' +
+        '<span class="rev-est">' + txt + '</span>' +
+        '<span class="badge ' + (p.fuente === 'preparador' ? 'pre' : 'ofi') + '">' +
+          (p.fuente === 'preparador' ? 'Daniel Dorta' : 'Oficial') + '</span>' +
+      '</div>' +
+      '<div class="rev-enun">' + this.esc(p.enunciado) + '</div>' +
+      (this.casoDe(p) ? '<details class="caso-rev"><summary>Supuesto de hecho del caso</summary><div>' +
+        this.esc(this.casoDe(p)) + '</div></details>' : '') +
+      ops +
+      '<div class="rev-ok">Correcta: ' + p.correcta.toUpperCase() + ' — ' +
+        this.esc((p.opciones || {})[p.correcta] || '') + '</div>' +
+      (p.justificacion
+        ? '<div class="rev-just"><b>' + this.esc(p.base || 'Base legal') + '</b> ' +
+          this.esc(p.justificacion) + '</div>'
+        : '<div class="rev-just">Sin justificación cargada.</div>') +
+      '</div>';
+  },
+
+  pintarVisor() {
+    const v = this._visor;
+    if (!v) return;
+    const r = v.res;
+    const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+
+    set('visor-titulo', r.titulo || 'Test');
+    set('visor-meta', this.fechaCorta(r.fecha) + ' · ' + (r.total || 0) + ' preguntas · ' +
+      this.mmss(r.tiempo || 0) + (r.penal > 0 ? ' · ' + this.txtPenal(r.penal) : ' · sin penalización'));
+    const nEl = document.getElementById('visor-nota');
+    if (nEl) {
+      nEl.textContent = (r.nota != null ? Number(r.nota).toFixed(2) : '—');
+      nEl.className = 'visor-nota ' + ((r.pct || 0) >= 50 ? 'ok' : 'mal');
+    }
+
+    const cuenta = { ok: 0, mal: 0, bl: 0 };
+    v.items.forEach((x) => { cuenta[this.estadoVisor(x)]++; });
+    set('vf-ok', cuenta.ok);
+    set('vf-mal', cuenta.mal);
+    set('vf-bl', cuenta.bl);
+    this.$$('#visor-filtros [data-vf]').forEach((b) =>
+      b.classList.toggle('on', b.dataset.vf === v.filtro));
+
+    const lista = this.filtroVisor();
+    const cuerpo = document.getElementById('visor-cuerpo');
+    const ant = document.getElementById('visor-ant');
+    const sig = document.getElementById('visor-sig');
+    if (!lista.length) {
+      if (cuerpo) cuerpo.innerHTML = '<div class="rev-vacio">No hay preguntas en ese filtro.</div>';
+      set('visor-pos', '0 / 0');
+      if (ant) ant.disabled = true;
+      if (sig) sig.disabled = true;
+      return;
+    }
+    if (v.idx >= lista.length) v.idx = lista.length - 1;
+    if (v.idx < 0) v.idx = 0;
+    if (cuerpo) cuerpo.innerHTML = this.htmlPreguntaVisor(lista[v.idx]);
+    set('visor-pos', (v.idx + 1) + ' / ' + lista.length);
+    if (ant) ant.disabled = v.idx === 0;
+    if (sig) sig.disabled = v.idx >= lista.length - 1;
   },
 
   /* ================= estadísticas ================= */
