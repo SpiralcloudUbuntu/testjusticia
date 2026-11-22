@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -16,6 +16,7 @@ const AJUSTES_DEF = {
   correccionInmediata: false,
   barajar: true,
   oscuro: false,
+  trampas: false,
   letra: 'normal'
 };
 
@@ -230,6 +231,8 @@ const App = {
     document.getElementById('btn-blanco').addEventListener('click', () => this.blanco());
     document.getElementById('btn-revision').addEventListener('click', () => this.toggleRevision());
     document.getElementById('btn-memorizar').addEventListener('click', () => this.memorizarActual());
+    const btnTrampas = document.getElementById('btn-trampas');
+    if (btnTrampas) btnTrampas.addEventListener('click', () => this.toggleTrampas());
 
     const btnPausar = document.getElementById('btn-pausar');
     if (btnPausar) btnPausar.addEventListener('click', () => this.pausarYsalir());
@@ -852,6 +855,7 @@ const App = {
       correccionInmediata: document.getElementById('set-correccion-inmediata').checked,
       barajar: document.getElementById('set-barajar').checked,
       oscuro: document.getElementById('set-oscuro').checked,
+      trampas: !!this.ajustes.trampas,
       letra: (document.getElementById('set-letra') || {}).value || 'normal'
     };
     this.dset('ajustes', this.ajustes);
@@ -1737,7 +1741,9 @@ const App = {
         }
         if (!corregida && descartadas[l]) btn.classList.add('descartada');
 
-        btn.innerHTML = '<span class="letra">' + l + '</span><span class="texto">' + this.esc(p.opciones[l] || '') + '</span>';
+        const txtOp = this.esc(p.opciones[l] || '');
+        btn.innerHTML = '<span class="letra">' + l + '</span><span class="texto">' +
+          (this.ajustes.trampas ? this.resaltarTrampas(txtOp) : txtOp) + '</span>';
         btn.addEventListener('click', () => this.responder(l));
 
         if (!corregida) {
@@ -1795,6 +1801,7 @@ const App = {
       const ultima = s.idx === s.preguntas.length - 1;
       document.getElementById('btn-siguiente').textContent = ultima ? 'Ver resultados' : 'Siguiente';
       this.pintarBotonMemorizar();
+      this.pintarBotonTrampas();
     } catch (e) {
       console.error('pintarPregunta', e);
     }
@@ -3567,6 +3574,49 @@ const App = {
       this.toast('Añadida a MemorIA');
     }
     this.pintarBotonMemorizar();
+  },
+
+  /* ================= palabras trampa =================
+     Palabras que cambian el sentido de una opcion ("siempre", "nunca",
+     "solo", "salvo"...). El boton las resalta mientras se hace el test. */
+
+  TRAMPAS: [
+    'exclusivamente', 'únicamente', 'unicamente', 'solamente', 'sólo', 'solo',
+    'siempre y cuando', 'siempre que', 'siempre', 'jamás', 'jamas', 'nunca',
+    'salvo', 'excepto', 'exceptuando', 'salvando',
+    'ninguno', 'ninguna', 'ningún', 'ningun', 'nadie',
+    'todos', 'todas', 'todo', 'toda',
+    'cualquiera', 'cualquier', 'alguno', 'alguna', 'algún', 'algun',
+    'en todo caso', 'a partir de', 'antes de', 'después de', 'despues de',
+    'más', 'mas', 'menos', 'no', 'sí', 'si'
+  ],
+
+  resaltarTrampas(txt) {
+    const s = String(txt || '');
+    if (!s) return s;
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const lista = this.TRAMPAS.slice().sort((a, b) => b.length - a.length).map(esc);
+    /* Sin \b: en castellano falla con tildes. Exigimos que la palabra no
+       este pegada a otra letra o numero, para no romper "nombre" por "no". */
+    const letra = '0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
+    const rx = new RegExp('(^|[^' + letra + '])(' + lista.join('|') +
+      ')(?![' + letra + '])', 'gi');
+    return s.replace(rx, (m, pre, w) => pre + '<span class="trampa">' + w + '</span>');
+  },
+
+  toggleTrampas() {
+    this.ajustes.trampas = !this.ajustes.trampas;
+    this.dset('ajustes', this.ajustes);
+    this.pintarBotonTrampas();
+    if (this.sesion) this.pintarPregunta();
+    this.toast(this.ajustes.trampas ? 'Palabras trampa resaltadas' : 'Resaltado desactivado');
+  },
+
+  pintarBotonTrampas() {
+    const b = document.getElementById('btn-trampas');
+    if (!b) return;
+    b.classList.toggle('activa', !!this.ajustes.trampas);
+    b.textContent = this.ajustes.trampas ? '🔍 Trampas ON' : '🔍 Trampas';
   },
 
   pintarBotonMemorizar() {
