@@ -6,7 +6,7 @@
 const UMBRAL_MUY_FALLADAS = 3;
 
 /* Version visible en Ajustes. Subir junto con CACHE_NAME de sw.js. */
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 
 const AJUSTES_DEF = {
   testN: 25,
@@ -233,6 +233,8 @@ const App = {
     document.getElementById('btn-memorizar').addEventListener('click', () => this.memorizarActual());
     const btnTrampas = document.getElementById('btn-trampas');
     if (btnTrampas) btnTrampas.addEventListener('click', () => this.toggleTrampas());
+    const btnDuda = document.getElementById('btn-duda');
+    if (btnDuda) btnDuda.addEventListener('click', () => this.toggleDuda());
 
     const btnPausar = document.getElementById('btn-pausar');
     if (btnPausar) btnPausar.addEventListener('click', () => this.pausarYsalir());
@@ -278,6 +280,8 @@ const App = {
     document.getElementById('btn-repetir-fallos').addEventListener('click', () => this.empezar('fallos-sesion'));
     document.getElementById('btn-volver-inicio').addEventListener('click', () => this.mostrarTab('tab-inicio'));
 
+    const bRepDudas = document.getElementById('btn-repetir-dudas');
+    if (bRepDudas) bRepDudas.addEventListener('click', () => this.repasarDudasDeUltima());
     const bVerTodo = document.getElementById('btn-ver-completo');
     if (bVerTodo) bVerTodo.addEventListener('click', () => this.abrirVisor(null));
     const vCerrar = document.getElementById('visor-cerrar');
@@ -1518,6 +1522,7 @@ const App = {
       else if (corr) {
         if (r === p.correcta) { okC++; cls = 'correcta'; } else { malC++; cls = 'incorrecta'; }
       } else { cls = 'respondida'; }
+      if (s.dudas && s.dudas[i]) cls += ' duda';
       if (i === s.idx) cls += ' actual';
       html += '<button type="button" class="question-btn ' + cls + '" data-ir="' + i + '">' + (i + 1) + '</button>';
     });
@@ -1606,6 +1611,7 @@ const App = {
       corregidas: {},
       contadas: {},
       descartadas: {},
+      dudas: {},
       idx: 0,
       inicio: Date.now(),
       fin: null,
@@ -1813,6 +1819,7 @@ const App = {
       document.getElementById('btn-siguiente').textContent = ultima ? 'Ver resultados' : 'Siguiente';
       this.pintarBotonMemorizar();
       this.pintarBotonTrampas();
+      this.pintarBotonDuda();
     } catch (e) {
       console.error('pintarPregunta', e);
     }
@@ -2106,6 +2113,24 @@ const App = {
       r: s.respuestas[i] || ''
     }));
 
+    /* Dudas: cuales marco y que tal le fue con ellas. */
+    res.dudas = s.preguntas
+      .map((p, i) => ((s.dudas && s.dudas[i]) ? this.clave(p) : null))
+      .filter(Boolean);
+    res.dudaOk = 0;
+    res.dudaMal = 0;
+    s.preguntas.forEach((p, i) => {
+      if (!s.dudas || !s.dudas[i]) return;
+      const rr = s.respuestas[i];
+      if (!rr) return;                       // en blanco: no cuenta
+      if (rr === p.correcta) res.dudaOk++; else res.dudaMal++;
+    });
+    const ds = this.dget('dudasStats', { ok: 0, mal: 0 }) || { ok: 0, mal: 0 };
+    ds.ok = (ds.ok || 0) + res.dudaOk;
+    ds.mal = (ds.mal || 0) + res.dudaMal;
+    this.dset('dudasStats', ds);
+    res.dudaStats = { ok: ds.ok, mal: ds.mal };
+
     this.historial.push(res);
     if (this.historial.length > 300) this.historial = this.historial.slice(-300);
     /* Solo los 60 ultimos conservan el detalle. */
@@ -2165,6 +2190,41 @@ const App = {
         'Acierto: <strong>' + res.pct + '%</strong> · Tiempo: ' + this.mmss(res.tiempo) +
         '<br>Nota orientativa sobre 10' + (this._ultimaSesion && this._ultimaSesion.penal > 0
           ? ' (' + this.txtPenal(this._ultimaSesion.penal) + ')' : ' (sin penalización)') + '.';
+
+      /* Dudas: recuento de esta sesion + consejo con el acumulado. */
+      const dEl = document.getElementById('resultado-dudas');
+      if (dEl) {
+        const nD = (res.dudas || []).length;
+        if (!nD) {
+          dEl.innerHTML = '';
+        } else {
+          const dOk = res.dudaOk || 0;
+          const dMal = res.dudaMal || 0;
+          let txt = '<b>' + nD + '</b> marcada' + (nD === 1 ? '' : 's') + ' con duda';
+          if (dOk + dMal > 0) txt += ' · has acertado ' + dOk + ' de ' + (dOk + dMal);
+          const st = res.dudaStats || { ok: 0, mal: 0 };
+          const tot = (st.ok || 0) + (st.mal || 0);
+          if (tot >= 5) {
+            const pct = Math.round(st.ok / tot * 100);
+            if (pct >= 70) {
+              txt += '<br><b>Aciertas el ' + pct + '% de las dudosas.</b> ' +
+                'Te sabes más de lo que crees: juégatela y deja de marcar tanto.';
+            } else if (pct <= 45) {
+              txt += '<br><b>Aciertas solo el ' + pct + '% de las dudosas.</b> ' +
+                'Cuando dudes, revisa antes de contestar: la corazonada te está costando puntos.';
+            } else {
+              txt += '<br>Aciertas el ' + pct + '% de las dudosas: ' +
+                'ni te sobra ni te falta confianza, sigue así.';
+            }
+          } else if (tot > 0) {
+            txt += '<br>Con ' + tot + ' respuesta' + (tot === 1 ? '' : 's') +
+              ' dudosa' + (tot === 1 ? '' : 's') + ' todavía no hay datos para aconsejarte.';
+          }
+          dEl.innerHTML = txt;
+        }
+      }
+      const bDudas = document.getElementById('btn-repetir-dudas');
+      if (bDudas) bDudas.classList.toggle('hidden', !(res.dudas && res.dudas.length));
 
       // Mensaje de racha: compara esta nota con la media de las anteriores.
       const rachaEl = document.getElementById('resultado-racha');
@@ -2330,6 +2390,14 @@ const App = {
       b.addEventListener('click', () => this.abrirVisor(b.dataset.ver)));
   },
 
+  repasarDudasDeUltima() {
+    const s = this._ultimaSesion;
+    if (!s) { this.toast('No hay un test reciente'); return; }
+    const lista = (s.preguntas || []).filter((p, i) => s.dudas && s.dudas[i]);
+    if (!lista.length) { this.toast('Ese test no tenía preguntas marcadas con duda'); return; }
+    this.iniciarConLista(lista, 'Repaso de dudas');
+  },
+
   repasarFalladasDe(fecha) {
     const h = (this.historial || []).find((r) => r.fecha === fecha);
     if (!h) { this.toast('No encuentro ese test'); return; }
@@ -2361,7 +2429,7 @@ const App = {
         justificacion: p.justificacion || '',
         base: p.base || ''
       })),
-      respuestas: {}, corregidas: {}, contadas: {}, descartadas: {},
+      respuestas: {}, corregidas: {}, contadas: {}, descartadas: {}, dudas: {},
       idx: 0, inicio: Date.now(), fin: null, minutos: 0,
       penal: this.ajustes.penal, correccionInmediata: false, tiempo: 0
     };
@@ -2428,6 +2496,7 @@ const App = {
       if (v.filtro === 'ok') return e === 'ok';
       if (v.filtro === 'mal') return e === 'mal';
       if (v.filtro === 'bl') return e === 'bl';
+      if (v.filtro === 'duda') return ((v.res.dudas || []).indexOf(x.c) >= 0);
       return true;
     });
   },
@@ -2512,6 +2581,8 @@ const App = {
     set('vf-ok', cuenta.ok);
     set('vf-mal', cuenta.mal);
     set('vf-bl', cuenta.bl);
+    const nDudas = ((r.dudas || []).length);
+    set('vf-duda', nDudas);
     this.$$('#visor-filtros [data-vf]').forEach((b) =>
       b.classList.toggle('on', b.dataset.vf === v.filtro));
 
@@ -3733,7 +3804,10 @@ const App = {
     if (m.ultimoDia === hoy) return; // ya contabilizada hoy
 
     if (acierto) {
-      m.racha = (m.ultimoDia === this.ayerISO()) ? ((m.racha || 0) + 1) : 1;
+      /* Opcion B: dias ACUMULADOS con acierto, no consecutivos.
+         Antes exigia que el ultimo dia fuera ayer, asi que saltarse un dia
+         devolvia la racha a 1 y nunca se pasaba de 1/5. */
+      m.racha = (m.racha || 0) + 1;
       m.ultimoDia = hoy;
       m.ultimoAcierto = hoy;
       if (m.racha >= 5) {
@@ -3808,6 +3882,42 @@ const App = {
     this.toast(this.ajustes.trampas ? 'Palabras trampa resaltadas' : 'Resaltado desactivado');
   },
 
+  /* ===== dudas: marcar una pregunta sin dejarla en blanco ===== */
+
+  nDudas() {
+    const s = this.sesion;
+    return s ? Object.keys(s.dudas || {}).length : 0;
+  },
+
+  esDuda(i) {
+    const s = this.sesion;
+    return !!(s && s.dudas && s.dudas[i]);
+  },
+
+  toggleDuda() {
+    const s = this.sesion;
+    if (!s) return;
+    s.dudas = s.dudas || {};
+    if (s.dudas[s.idx]) delete s.dudas[s.idx];
+    else s.dudas[s.idx] = true;
+    this.guardarSesion();
+    this.pintarPregunta();
+    this.toast(s.dudas[s.idx] ? 'Marcada con duda' : 'Duda quitada');
+  },
+
+  pintarBotonDuda() {
+    const b = document.getElementById('btn-duda');
+    if (!b) return;
+    const s = this.sesion;
+    const n = this.nDudas();
+    const marcada = this.esDuda(s ? s.idx : -1);
+    b.classList.toggle('activa', marcada);
+    b.textContent = '🟡 ' + (marcada ? 'Duda ✓' : 'Duda') + (n ? ' · ' + n : '');
+    b.title = marcada
+      ? 'Quitar la marca de duda'
+      : 'Marcar esta pregunta como dudosa (no la deja en blanco)';
+  },
+
   pintarBotonTrampas() {
     const b = document.getElementById('btn-trampas');
     if (!b) return;
@@ -3821,7 +3931,14 @@ const App = {
     const m = this.memoriaActual();
     if (m) {
       btn.classList.add('activa');
-      btn.textContent = m.dominada ? '★ Dominada' : '★ MemorIA ' + (m.racha || 0) + '/5';
+      btn.textContent = m.dominada
+        ? '★ Dominada'
+        : ('★ MemorIA ' + (m.racha || 0) + '/5 días' +
+           (m.ultimoDia === this.hoyISO() ? ' · hoy' : ''));
+      btn.title = m.dominada
+        ? 'Pregunta dominada: ya no vuelve a MemorIA'
+        : 'Un dia acertado suma 1. Un fallo vuelve a 0. Te faltan ' +
+          (5 - (m.racha || 0)) + ' días.';
     } else {
       btn.classList.remove('activa');
       btn.textContent = '★ MemorIA';
@@ -3934,6 +4051,7 @@ const App = {
       corregidas: {},
       contadas: {},
       descartadas: {},
+      dudas: {},
       idx: 0,
       inicio: Date.now(),
       fin: null,

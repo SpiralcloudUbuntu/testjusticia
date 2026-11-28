@@ -350,6 +350,7 @@
             <span id="test-cronometro" class="crono hidden">00:00</span>
             <button id="btn-memorizar" class="modo-chip memoria" type="button" title="Añadir esta pregunta a MemorIA">★ MemorIA</button>
             <button id="btn-trampas" class="modo-chip" type="button" title="Resaltar las palabras que suelen usarse como trampa">🔍 Trampas</button>
+            <button id="btn-duda" class="modo-chip" type="button" title="Marcar esta pregunta como dudosa">🟡 Duda</button>
             <button id="test-modo-chip" class="modo-chip examen" type="button">Examen</button>
           </div>
           <div class="progress"><div id="test-progress-bar" class="progress-fill"></div></div>
@@ -411,6 +412,7 @@
           <div id="resultado-nota" class="nota">—</div>
           <div id="resultado-titulo" class="card-titulo">Resultado</div>
           <div id="resultado-detalle" class="card-meta"></div>
+          <div id="resultado-dudas" class="card-meta"></div>
           <div id="resultado-racha" class="racha hidden"></div>
           <div class="afb">
             <span class="afb-ok" id="res-afb-ok" style="width:0%"></span>
@@ -419,6 +421,7 @@
           </div>
           <div class="test-nav" style="margin-top:10px">
             <button id="btn-ver-completo" class="btn-pri" type="button">Ver el test completo</button>
+            <button id="btn-repetir-dudas" class="btn-sec hidden" type="button">🟡 Repasar las dudas</button>
           </div>
         </div>
 
@@ -475,6 +478,9 @@
               </button>
               <button class="vf bl" type="button" data-vf="bl">
                 <b id="vf-bl">0</b><span>En blanco</span>
+              </button>
+              <button class="vf duda" type="button" data-vf="duda">
+                <b id="vf-duda">0</b><span>Dudas</span>
               </button>
             </div>
           </div>
